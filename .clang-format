@@ -1,11 +1,15 @@
 ---
-BasedOnStyle: Google
+BasedOnStyle: Microsoft
 IndentWidth: 4
 ---
 Language: Cpp
 
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
+# 访问说明符(public、private等)的偏移
+# AccessModifierOffset: -4
+# 每行字符的限制，0表示没有限制
+# ColumnLimit: 120
 
 SpacesInContainerLiterals: false
 JavaScriptQuotes: Single
