@@ -1,4 +1,9 @@
-/bin
-/build
+/bin/
+/build/
+/training-data/
+
+*.exe
 
 /test.sh
+/test.cc
+/a.txt
