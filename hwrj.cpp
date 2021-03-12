@@ -1,36 +1,36 @@
-/*
-#include<iostream>
-#include<vector>
-#include<unordered_map>
-#include<fstream>
-#include<queue>
-*/
-#include<bits/stdc++.h>
+#include <fstream>
+#include <iostream>
+#include <unordered_map>
+#include <vector>
+
+// #include <bits/stdc++.h>
+using namespace std;
 
 #define TEST
-
-using namespace std;
 
 #ifdef TEST
 int priceSum = 0, lossSum = 0;
 #endif // TEST
+
 int n, m;
-//¶ÁÈëÊı¾İÁÙÊ±±äÁ¿
+// è¯»å…¥æ•°æ®ä¸´æ—¶å˜é‡
 string name, ncpu, nG, nprice, nloss, nisdouble;
-//¶ÁÈë´æ´¢ÁÙÊ±±äÁ¿
+// è¯»å…¥å­˜å‚¨ä¸´æ—¶å˜é‡
 int cpu, G, price, loss, isdouble;
-// µ±Ç°¾ö²ßĞèÒªµÄCPUºÍMemory
+// å½“å‰å†³ç­–éœ€è¦çš„CPUå’ŒMemory
 int needC = 0, needM = 0, maxC = 0, maxM = 0;
-//·şÎñÆ÷×ÜÊı
+// æœåŠ¡å™¨æ€»æ•°
 int serverCnt = 0;
 string curNeedServer;
+
+// ç”¨æˆ·å¯¹è™šæ‹Ÿæœºçš„è¯·æ±‚
 struct req
 {
     bool isadd;
     string id;
     string name;
-    //char id[28];
-    //char name[32];
+    // char id[28];
+    // char name[32];
     req(bool isa, string i, string nam)
     {
         isadd = isa;
@@ -38,13 +38,14 @@ struct req
         name = nam;
     }
 };
-//´æÔÚµÄ·şÎñÆ÷ĞÅÏ¢
+
+// å­˜åœ¨çš„æœåŠ¡å™¨ä¿¡æ¯
 struct eServer
 {
     int resCpuA, resCpuB, resMermoryA, resMermoryB;
-    #ifdef TEST
+#ifdef TEST
     int perLoss;
-    #endif // TEST
+#endif // TEST
     float CM_Ratio_A, CM_Ratio_B;
     string name;
     /*
@@ -58,7 +59,8 @@ struct eServer
     }
     */
 };
-//´æÔÚµÄĞéÄâ»úĞÅÏ¢
+
+// å­˜åœ¨çš„è™šæ‹Ÿæœºä¿¡æ¯
 struct eVM
 {
     bool isA;
@@ -73,158 +75,162 @@ struct eVM
     }
     */
 };
+
 unordered_map<string, vector<int>> serverInfo;
 unordered_map<string, vector<int>> vmInfo;
 unordered_map<string, eVM> existVM;
 unordered_map<int, eServer> existServer;
-//Í³¼Æµ±Ç°ËùĞèCPU£¬MEMORYËùÓÃmap
+// ç»Ÿè®¡å½“å‰æ‰€éœ€CPUï¼ŒMEMORYæ‰€ç”¨map
 unordered_map<string, vector<int>> needList;
-// µ±Ç°¶ÓÁĞ´ıÑ¡·şÎñÆ÷ĞÍºÅ£¨±ØĞë°üº¬ÈİÁ¿´óÓÚÈÎÒâÇëÇóµÄ·şÎñÆ÷´óĞ¡£©
+// å½“å‰é˜Ÿåˆ—å¾…é€‰æœåŠ¡å™¨å‹å·ï¼ˆå¿…é¡»åŒ…å«å®¹é‡å¤§äºä»»æ„è¯·æ±‚çš„æœåŠ¡å™¨å¤§å°ï¼‰
 vector<string> readyServer = {"NV603"};
 vector<req> requests;
-//ÉÏÁ½ÈÕ²Ù×÷ÏûÏ¢
+// ä¸Šä¸¤æ—¥æ“ä½œæ¶ˆæ¯
 vector<string> infoLog;
+
 int str2int(string &str)
 {
     int ret = 0;
-    for(int i=0;i<str.size();++i)
+    for (int i = 0; i < str.size(); ++i)
     {
-        if(str[i]>='0'&&str[i]<='9')
+        if (str[i] >= '0' && str[i] <= '9')
         {
-            ret = ret*10 + str[i] - '0';
+            ret = ret * 10 + str[i] - '0';
         }
         else
             return ret;
     }
     return ret;
 }
-//ÕÒµ½×îÓÅ·şÎñÆ÷ÁĞ±í
+
+// æ‰¾åˆ°æœ€ä¼˜æœåŠ¡å™¨åˆ—è¡¨
 vector<string> bestServers(float CM_Radio, int maxCpu, int maxMemory);
-//Ö¸¶¨·şÎñÆ÷·ÖÅä
+
+// æŒ‡å®šæœåŠ¡å™¨åˆ†é…
 bool Specify_Resdist(vector<int> &vm, int id)
 {
     eServer &es = existServer[id];
-    if(vm[2])
+    if (vm[2])
     {
-        int c = vm[0]/2, m = vm[1]/2;
-        if(es.resCpuA>=c&&es.resCpuB>=c&&es.resMermoryA>=m&&es.resMermoryB>=m)
+        int c = vm[0] / 2, m = vm[1] / 2;
+        if (es.resCpuA >= c && es.resCpuB >= c && es.resMermoryA >= m && es.resMermoryB >= m)
         {
             es.resCpuA -= c;
             es.resCpuB -= c;
             es.resMermoryA -= m;
             es.resMermoryB -= m;
-            es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
-            es.CM_Ratio_B = es.resCpuB*1.0/es.resMermoryB;
+            es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
+            es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
             return true;
         }
     }
-    //µ¥¶Ë·ÖÅäÇé¿ö£¬ÓÅ»¯µã
+    //å•ç«¯åˆ†é…æƒ…å†µï¼Œä¼˜åŒ–ç‚¹
     //????????????????????????
     //????????????????????????
     else
     {
-        // ºóĞøÏ£Íû½¨Á¢ºìºÚÊ÷£¬°´CM_Ratio²ÎÊıÑ¡ÔñºÏÊÊµÄ·şÎñÆ÷·ÖÅä
-        if(es.resCpuA>=vm[0]&&es.resMermoryA>=vm[1])
+        // åç»­å¸Œæœ›å»ºç«‹çº¢é»‘æ ‘ï¼ŒæŒ‰CM_Ratioå‚æ•°é€‰æ‹©åˆé€‚çš„æœåŠ¡å™¨åˆ†é…
+        if (es.resCpuA >= vm[0] && es.resMermoryA >= vm[1])
         {
             es.resCpuA -= vm[0];
             es.resMermoryA -= vm[1];
-            es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
+            es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
             return true;
         }
     }
     return false;
 }
-//ÔÚÒÑÓĞ·şÎñÆ÷ÉÏ·ÖÅä»òÉ¾³ı
+
+// åœ¨å·²æœ‰æœåŠ¡å™¨ä¸Šåˆ†é…æˆ–åˆ é™¤
 bool Redistribution(req &r)
 {
-    // Èç¹ûÊÇÉ¾³ı²Ù×÷
-    if(!r.isadd)
+    // å¦‚æœæ˜¯åˆ é™¤æ“ä½œ
+    if (!r.isadd)
     {
-        // ´æÔÚµÄĞéÄâ»úĞÅÏ¢
+        // å­˜åœ¨çš„è™šæ‹Ÿæœºä¿¡æ¯
         eVM &ev = existVM[r.id];
-        // ´æÔÚµÄ·şÎñÆ÷
+        // å­˜åœ¨çš„æœåŠ¡å™¨
         eServer &es = existServer[ev.serverID];
-        // ´æÔÚµÄĞéÄâ»ú¸ñÊ½
+        // å­˜åœ¨çš„è™šæ‹Ÿæœºæ ¼å¼
         vector<int> &vm = vmInfo[ev.name];
-        if(vm[2])
+        if (vm[2])
         {
-            //¸üĞÂ·şÎñÆ÷ĞÅÏ¢
-            es.resCpuA += vm[0]/2;
-            es.resCpuB += vm[0]/2;
-            es.resMermoryA += vm[1]/2;
-            es.resMermoryB += vm[1]/2;
-            es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
-            es.CM_Ratio_B = es.resCpuB*1.0/es.resMermoryB;
-
+            //æ›´æ–°æœåŠ¡å™¨ä¿¡æ¯
+            es.resCpuA += vm[0] / 2;
+            es.resCpuB += vm[0] / 2;
+            es.resMermoryA += vm[1] / 2;
+            es.resMermoryB += vm[1] / 2;
+            es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
+            es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
         }
-        else if(ev.isA)
+        else if (ev.isA)
         {
             es.resCpuA += vm[0];
             es.resMermoryA += vm[1];
-            es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
+            es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
         }
         else
         {
             es.resCpuB += vm[0];
             es.resMermoryB += vm[1];
-            es.CM_Ratio_B = es.resCpuB*1.0/es.resMermoryB;
+            es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
         }
-        //É¾³ıĞéÄâ»úĞÅÏ¢
+        //åˆ é™¤è™šæ‹Ÿæœºä¿¡æ¯
         existVM.erase(r.id);
         return true;
     }
     vector<int> &vm = vmInfo[r.name];
-    //Èç¹ûË«¶Ë
-    if(vm[2])
+    //å¦‚æœåŒç«¯
+    if (vm[2])
     {
-        int c = vm[0]/2, m = vm[1]/2;
-        for(int i=0;i<serverCnt;++i)
+        int c = vm[0] / 2, m = vm[1] / 2;
+        for (int i = 0; i < serverCnt; ++i)
         {
             eServer &es = existServer[i];
-            if(es.resCpuA>=c&&es.resCpuB>=c&&es.resMermoryA>=m&&es.resMermoryB>=m)
+            if (es.resCpuA >= c && es.resCpuB >= c && es.resMermoryA >= m && es.resMermoryB >= m)
             {
-                //¸üĞÂ·şÎñÆ÷ĞÅÏ¢
+                //æ›´æ–°æœåŠ¡å™¨ä¿¡æ¯
                 es.resCpuA -= c;
                 es.resCpuB -= c;
                 es.resMermoryA -= m;
                 es.resMermoryB -= m;
-                es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
-                es.CM_Ratio_B = es.resCpuB*1.0/es.resMermoryB;
+                es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
+                es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
 
-                //´´½¨ĞéÄâ»úĞÅÏ¢
+                //åˆ›å»ºè™šæ‹Ÿæœºä¿¡æ¯
                 existVM[r.id].name = r.name;
-                //existVM[r.id].isA = ;
+                // existVM[r.id].isA = ;
                 existVM[r.id].serverID = i;
                 return true;
             }
         }
     }
-    //µ¥¶Ë·ÖÅäÇé¿ö£¬ÓÅ»¯µã
+    //å•ç«¯åˆ†é…æƒ…å†µï¼Œä¼˜åŒ–ç‚¹
     //????????????????????????
     //????????????????????????
     else
     {
         int c = vm[0], m = vm[1];
-        // ºóĞøÏ£Íû½¨Á¢ºìºÚÊ÷£¬°´CM_Ratio²ÎÊıÑ¡ÔñºÏÊÊµÄ·şÎñÆ÷·ÖÅä
-        for(int i=0;i<serverCnt;++i)
+        // åç»­å¸Œæœ›å»ºç«‹çº¢é»‘æ ‘ï¼ŒæŒ‰CM_Ratioå‚æ•°é€‰æ‹©åˆé€‚çš„æœåŠ¡å™¨åˆ†é…
+        for (int i = 0; i < serverCnt; ++i)
         {
             eServer &es = existServer[i];
-            if(es.resCpuA>=c&&es.resMermoryA>=m)
+            if (es.resCpuA >= c && es.resMermoryA >= m)
             {
                 es.resCpuA -= c;
                 es.resMermoryA -= m;
-                es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
+                es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
 
                 existVM[r.id].name = r.name;
                 existVM[r.id].isA = 1;
                 existVM[r.id].serverID = i;
                 return true;
             }
-            else if(es.resCpuB>=c&&es.resMermoryB>=m)
+            else if (es.resCpuB >= c && es.resMermoryB >= m)
             {
                 es.resCpuB -= c;
                 es.resMermoryB -= m;
-                es.CM_Ratio_B = es.resCpuB*1.0/es.resMermoryB;
+                es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
 
                 existVM[r.id].name = r.name;
                 existVM[r.id].isA = 0;
@@ -235,21 +241,22 @@ bool Redistribution(req &r)
     }
     return false;
 }
-// Ã¿¸öÇëÇó¶ÓÁĞ·ÖÅä·şÎñÆ÷
+
+// æ¯ä¸ªè¯·æ±‚é˜Ÿåˆ—åˆ†é…æœåŠ¡å™¨
 void applyServer(vector<req> &requests)
 {
     int choseServer = 0;
     string curNeedServer;
-    for(int i=0;i<requests.size();++i)
+    for (int i = 0; i < requests.size(); ++i)
     {
-        // Èç¹û´æÔÚµÄ·şÎñÆ÷·ÖÅäÎ´³É¹¦£¬ÔòÔÙ·ÖÅä
-        if(!Redistribution(requests[i]))
+        // å¦‚æœå­˜åœ¨çš„æœåŠ¡å™¨åˆ†é…æœªæˆåŠŸï¼Œåˆ™å†åˆ†é…
+        if (!Redistribution(requests[i]))
         {
             do
             {
                 curNeedServer = readyServer[choseServer];
-                int c = serverInfo[curNeedServer][0]/2, m = serverInfo[curNeedServer][1]/2;
-                float cm = c*1.0/m;
+                int c = serverInfo[curNeedServer][0] / 2, m = serverInfo[curNeedServer][1] / 2;
+                float cm = c * 1.0 / m;
                 existServer[serverCnt].name = curNeedServer;
                 existServer[serverCnt].resCpuA = c;
                 existServer[serverCnt].resCpuB = c;
@@ -258,26 +265,27 @@ void applyServer(vector<req> &requests)
                 existServer[serverCnt].CM_Ratio_A = cm;
                 existServer[serverCnt].CM_Ratio_B = cm;
                 choseServer++;
-            }while(!Specify_Resdist(vmInfo[requests[i].name], serverCnt));
-            #ifdef TEST
+            } while (!Specify_Resdist(vmInfo[requests[i].name], serverCnt));
+#ifdef TEST
             priceSum += serverInfo[curNeedServer][2];
-            #endif // TEST
+#endif // TEST
             choseServer = 0;
             serverCnt++;
         }
     }
 }
+
 void dataIO()
 {
-    #ifdef TEST
+#ifdef TEST
     string inputFile = "test.txt";
     ifstream cin(inputFile);
-    #endif // TEST
-    cin>>n;
-    for(int i=0;i<n;++i)
+#endif // TEST
+    cin >> n;
+    for (int i = 0; i < n; ++i)
     {
-        cin>>name>>ncpu>>nG>>nprice>>nloss;
-        name = name.substr(1, name.size()-2);
+        cin >> name >> ncpu >> nG >> nprice >> nloss;
+        name = name.substr(1, name.size() - 2);
         cpu = str2int(ncpu);
         G = str2int(nG);
         price = str2int(nprice);
@@ -285,32 +293,32 @@ void dataIO()
         serverInfo[name] = {cpu, G, price, loss};
     }
 
-    cin>>n;
-    for(int i=0;i<n;++i)
+    cin >> n;
+    for (int i = 0; i < n; ++i)
     {
-        cin>>name>>ncpu>>nG>>nisdouble;
-        name = name.substr(1, name.size()-1);
+        cin >> name >> ncpu >> nG >> nisdouble;
+        name = name.substr(1, name.size() - 1);
         cpu = str2int(ncpu);
         G = str2int(nG);
-        isdouble = nisdouble[0]-'0';
+        isdouble = nisdouble[0] - '0';
         vmInfo[name] = {cpu, G, isdouble};
     }
 
-    cin>>n;
-    for(int i=0;i<n;++i)
+    cin >> n;
+    for (int i = 0; i < n; ++i)
     {
-        cin>>m;
-        //ÖØÖÃµ±ÌìĞèÇó
+        cin >> m;
+        //é‡ç½®å½“å¤©éœ€æ±‚
         needC = 0;
         needM = 0;
         maxC = 0;
         maxM = 0;
-        for(int j=0;j<m;++j)
+        for (int j = 0; j < m; ++j)
         {
-            cin>>name;
-            if(isdouble = name[1]=='a')
+            cin >> name;
+            if (isdouble = name[1] == 'a')
             {
-                cin>>ncpu>>nG;
+                cin >> ncpu >> nG;
                 requests.emplace_back(isdouble, nG, ncpu);
                 needList[nG] = {vmInfo[ncpu][0], vmInfo[ncpu][1]};
                 needC += needList[nG][0];
@@ -320,24 +328,25 @@ void dataIO()
             }
             else
             {
-                cin>>nG;
+                cin >> nG;
                 requests.emplace_back(isdouble, nG, "");
-                //ÓĞĞ©ĞéÄâ»ú¿ÉÄÜÊÇµ±Ìì´´½¨µ±ÌìÉ¾³ı
+                //æœ‰äº›è™šæ‹Ÿæœºå¯èƒ½æ˜¯å½“å¤©åˆ›å»ºå½“å¤©åˆ é™¤
 
                 needC -= needList[nG][0];
                 needM -= needList[nG][1];
                 needList.erase(nG);
             }
         }
-        float need_CM_Radio = needC*1.0/needM;
-        //readyServer = bestServers(need_CM_Radio, maxC, maxM);
+        float need_CM_Radio = needC * 1.0 / needM;
+        // readyServer = bestServers(need_CM_Radio, maxC, maxM);
         applyServer(requests);
     }
-    #ifdef TEST
-    cout<<priceSum<<endl;
+#ifdef TEST
+    cout << priceSum << endl;
     cin.close();
-    #endif // TEST
+#endif // TEST
 }
+
 int main()
 {
     dataIO();
