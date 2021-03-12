@@ -1,37 +1,28 @@
-#include <algorithm>
-#include <fstream>
-#include <iostream>
-#include <unordered_map>
-#include <vector>
 
-// #include <bits/stdc++.h>
-using namespace std;
+#include <iostream>
+#include <vector>
+#include <unordered_map>
+#include <fstream>
+#include <queue>
+#include <time.h>
+
+//#include<bits/stdc++.h>
 
 #define TEST
+
+using namespace std;
 
 #ifdef TEST
 int priceSum = 0, lossSum = 0;
 #endif // TEST
 
-int n, m;
-// 读入数据临时变量
-string name, ncpu, nG, nprice, nloss, nisdouble;
-// 读入存储临时变量
-int cpu, G, price, loss, isdouble;
-// 当前决策需要的CPU和Memory
-int needC = 0, needM = 0, maxC = 0, maxM = 0;
-// 服务器总数
-int serverCnt = 0;
-string curNeedServer;
-
-// 用户对虚拟机的请求
 struct req
 {
     bool isadd;
     string id;
     string name;
-    // char id[28];
-    // char name[32];
+    //char id[28];
+    //char name[32];
     req(bool isa, string i, string nam)
     {
         isadd = isa;
@@ -39,108 +30,259 @@ struct req
         name = nam;
     }
 };
-
-// 存在的服务器信息
+//存在的服务器信息
 struct eServer
 {
     int resCpuA, resCpuB, resMermoryA, resMermoryB;
-#ifdef TEST
+    #ifdef TEST
     int perLoss;
-#endif // TEST
+    #endif // TEST
     float CM_Ratio_A, CM_Ratio_B;
     string name;
-    /*
-    eServer(string &nam, int Cpu, int Mermory)
-    {
-        name = nam;
-        resCpuA = resCpuB = Cpu/2;
-        resMermoryA = resMermoryB = Mermory/2;
-        CM_Ratio_A = resCpuA*1.0/resMermoryA;
-        CM_Ratio_B = resCpuB*1.0/resMermoryB;
-    }
-    */
 };
-
-// 存在的虚拟机信息
+//存在的虚拟机信息
 struct eVM
 {
     bool isA;
     int serverID;
     string name;
-    /*
-    eVM(string nam, int id, bool A)
-    {
-        name = nam;
-        serverID = id;
-        isA = A;
-    }
-    */
 };
-
 unordered_map<string, vector<int>> serverInfo;
 unordered_map<string, vector<int>> vmInfo;
 unordered_map<string, eVM> existVM;
 unordered_map<int, eServer> existServer;
-// 统计当前所需CPU，MEMORY所用map
+//统计当前所需CPU，MEMORY所用map
 unordered_map<string, vector<int>> needList;
 // 当前队列待选服务器型号（必须包含容量大于任意请求的服务器大小）
 vector<string> readyServer = {"NV603"};
-vector<req> requests;
-// 上两日操作消息
-vector<string> infoLog;
 
-int str2int(string &str)
+// 当次队列购买的服务器
+unordered_map<string, int> serverapply;
+// 当次队列购买的服务器总数
+int serverCurCnt = 0;
+int n, m;
+//读入数据临时变量
+string name, vmID;
+//读入存储临时变量
+int cpu, memory, price, loss, isdouble;
+// 当前决策需要的CPU和Memory
+int needC = 0, needM = 0, maxC = 0, maxM = 0;
+//服务器总数
+int serverCnt = 0;
+// 当前最匹配服务器
+string curNeedServer;
+// 当次队列申请的虚拟机与服务器与迁移输出信息
+vector<string> VMapplyInfo, serverapplyInfo, moveInfo;
+
+vector<req> requests;
+//上两日操作消息
+vector<string> infoLog;
+const char digit[11] = "0123456789";
+string int2str(int num)
 {
-    int ret = 0;
-    for (int i = 0; i < str.size(); ++i)
+    if (num==0)
+        return "0";
+    string ret = "";
+    while(num)
     {
-        if (str[i] >= '0' && str[i] <= '9')
-        {
-            ret = ret * 10 + str[i] - '0';
-        }
-        else
-            return ret;
+        ret += digit[num%10];
+        num/=10;
+    }
+    reverse(ret.begin(), ret.end());
+    return ret;
+}
+///////////////////////////////////////////////
+// 读取函数
+int getSingleNum()
+{
+    char c;
+    int ret = 0;
+    while((c = getchar())!='\n')
+    {
+        ret = (ret<<3) + (ret<<1) + c - '0';
     }
     return ret;
 }
-
-// 找到最优服务器列表
-vector<string> bestServers(float CM_Radio, int maxCpu, int maxMemory)
+int getNum()
 {
-    // todo: priority_queue<pair<string, vector<double>>> a;
-    vector<pair<string, float>> uniformedServers;
-    for (auto server : serverInfo)
+    char c;
+    int ret = 0;
+    while((c=getchar())!=',')
     {
-        float uCpu = 1.0 * server.second[0] / server.second[2] * 1000;
-        float uMemory = 1.0 * server.second[1] / server.second[2] * 1000;
-        float projection = (uMemory * 1 + uCpu * CM_Radio) / (1 + sqrt(CM_Radio * CM_Radio));
-        // ? make_pair()
-        uniformedServers.emplace_back(server.first, projection);
+        ret = (ret<<3) + (ret<<1) + c - '0';
     }
-    sort(uniformedServers.begin(), uniformedServers.end(),
-         [](const pair<string, float> a, pair<string, float> b) { return a.second > b.second; });
-    int sizeOfServers = uniformedServers.size() / 10;
-    vector<string> res(sizeOfServers);
-    transform(uniformedServers.begin(), uniformedServers.begin() + sizeOfServers, res.begin(),
-              [](const pair<string, float> x) { return x.first; });
-    return res;
+    return ret;
+}
+// 读取请求
+void getRequest()
+{
+    char c;
+    // name代表型号
+    name = "";
+    // 这里vmID代表编号
+    vmID = "";
+    getchar();
+    if(isdouble = (c = getchar()) == 'a')
+    {
+        while((c = getchar())!=',');
+        getchar();
+        while((c = getchar())!=',')
+            name += c;
+        getchar();
+        while((c = getchar())!=')')
+            vmID += c;
+        needList[vmID] = {vmInfo[name][0], vmInfo[name][1]};
+        needC += needList[vmID][0];
+        needM += needList[vmID][1];
+        maxC = max(maxC, needList[vmID][0]);
+        maxM = max(maxM, needList[vmID][1]);
+    }
+    else
+    {
+        while((c = getchar())!=',');
+        getchar();
+        while((c = getchar())!=')')
+            vmID += c;
+        needC -= needList[vmID][0];
+        needM -= needList[vmID][1];
+        needList.erase(vmID);
+    }
+    getchar();
+    requests.emplace_back(isdouble, vmID, name);
+}
+// 按行读取虚拟机信息
+void getVMInfo()
+{
+    char c;
+    name = "";
+    getchar();
+    while((c = getchar())!=',')
+        name += c;
+    getchar();
+    cpu = getNum();
+    getchar();
+    memory = getNum();
+    getchar();
+    isdouble = getchar() == '1';
+    getchar();
+    getchar();
+    vmInfo[name] = {cpu, memory, isdouble};
+}
+// 按行读取服务器信息
+void getServerInfo()
+{
+    char c;
+    name = "";
+    getchar();
+    while((c = getchar())!=',')
+        name += c;
+    getchar();
+    cpu = getNum();
+    getchar();
+    memory = getNum();
+    getchar();
+    price = getNum();
+    getchar();
+    loss = 0;
+    while((c=getchar())!=')')
+    {
+        loss = loss<<3 + loss<<1 + c - '0';
+    }
+    getchar();
+    serverInfo[name] = {cpu, memory, price, loss};
 }
 
-// 指定服务器分配
+// 生成分配信息
+void returnInfo(int id, char kind = 'D')
+{
+    string vmaly = "";
+    if(kind == 'A')
+    {
+        vmaly += "(";
+        vmaly += int2str(id);
+        vmaly += ", ";
+        vmaly += "A)";
+        VMapplyInfo.emplace_back(vmaly);
+    }
+    else if(kind == 'B')
+    {
+        vmaly += "(";
+        vmaly += int2str(id);
+        vmaly += ", ";
+        vmaly += "B)";
+        VMapplyInfo.emplace_back(vmaly);
+    }
+    else
+    {
+        vmaly += "(";
+        vmaly += int2str(id);
+        vmaly += ")";
+        VMapplyInfo.emplace_back(vmaly);
+    }
+}
+// 生成服务器购买信息
+void rserverInfo(const string &name, int num)
+{
+    string rsi = "";
+    rsi += '(';
+    rsi += name;
+    rsi += ", ";
+    rsi += int2str(num);
+    rsi += ')';
+    serverapplyInfo.emplace_back(rsi);
+}
+// 统计输出的服务器信息
+void serverCensus()
+{
+    string sss = "purchase";
+    rserverInfo(sss, serverCurCnt);
+    for(auto &[k, v]:serverapply)
+    {
+        rserverInfo(k, v);
+    }
+    serverapply.clear();
+    serverCurCnt = 0;
+}
+// 统计迁移信息
+void moveCensus()
+{
+    string ret = "(migration, 0)";
+    moveInfo.emplace_back(ret);
+}
+// 统一输出信息
+void infoOut()
+{
+    for(int i=0;i<serverapplyInfo.size();++i)
+        cout<<serverapplyInfo[i]<<endl;
+    serverapplyInfo.clear();
+    for(int i=0;i<moveInfo.size();++i)
+        cout<<moveInfo[i]<<endl;
+    moveInfo.clear();
+    for(int i=0;i<VMapplyInfo.size();++i)
+        cout<<VMapplyInfo[i]<<endl;
+    VMapplyInfo.clear();
+}
+//找到最优服务器列表
+vector<string> bestServers(float CM_Radio, int maxCpu, int maxMemory);
+//指定服务器分配
 bool Specify_Resdist(vector<int> &vm, int id)
 {
     eServer &es = existServer[id];
-    if (vm[2])
+    if(vm[2])
     {
-        int c = vm[0] / 2, m = vm[1] / 2;
-        if (es.resCpuA >= c && es.resCpuB >= c && es.resMermoryA >= m && es.resMermoryB >= m)
+        int c = vm[0]/2, m = vm[1]/2;
+        if(es.resCpuA>=c&&es.resCpuB>=c&&es.resMermoryA>=m&&es.resMermoryB>=m)
         {
             es.resCpuA -= c;
             es.resCpuB -= c;
             es.resMermoryA -= m;
             es.resMermoryB -= m;
-            es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
-            es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
+            es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
+            es.CM_Ratio_B = es.resCpuB*1.0/es.resMermoryB;
+
+            // 申请虚拟机信息存储
+            returnInfo(id);
+
             return true;
         }
     }
@@ -150,22 +292,24 @@ bool Specify_Resdist(vector<int> &vm, int id)
     else
     {
         // 后续希望建立红黑树，按CM_Ratio参数选择合适的服务器分配
-        if (es.resCpuA >= vm[0] && es.resMermoryA >= vm[1])
+        if(es.resCpuA>=vm[0]&&es.resMermoryA>=vm[1])
         {
             es.resCpuA -= vm[0];
             es.resMermoryA -= vm[1];
-            es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
+            es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
+
+            returnInfo(id, 'A');
+
             return true;
         }
     }
     return false;
 }
-
-// 在已有服务器上分配或删除
+//在已有服务器上分配或删除
 bool Redistribution(req &r)
 {
     // 如果是删除操作
-    if (!r.isadd)
+    if(!r.isadd)
     {
         // 存在的虚拟机信息
         eVM &ev = existVM[r.id];
@@ -173,27 +317,28 @@ bool Redistribution(req &r)
         eServer &es = existServer[ev.serverID];
         // 存在的虚拟机格式
         vector<int> &vm = vmInfo[ev.name];
-        if (vm[2])
+        if(vm[2])
         {
             //更新服务器信息
-            es.resCpuA += vm[0] / 2;
-            es.resCpuB += vm[0] / 2;
-            es.resMermoryA += vm[1] / 2;
-            es.resMermoryB += vm[1] / 2;
-            es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
-            es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
+            es.resCpuA += vm[0]/2;
+            es.resCpuB += vm[0]/2;
+            es.resMermoryA += vm[1]/2;
+            es.resMermoryB += vm[1]/2;
+            es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
+            es.CM_Ratio_B = es.resCpuB*1.0/es.resMermoryB;
+
         }
-        else if (ev.isA)
+        else if(ev.isA)
         {
             es.resCpuA += vm[0];
             es.resMermoryA += vm[1];
-            es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
+            es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
         }
         else
         {
             es.resCpuB += vm[0];
             es.resMermoryB += vm[1];
-            es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
+            es.CM_Ratio_B = es.resCpuB*1.0/es.resMermoryB;
         }
         //删除虚拟机信息
         existVM.erase(r.id);
@@ -201,26 +346,29 @@ bool Redistribution(req &r)
     }
     vector<int> &vm = vmInfo[r.name];
     //如果双端
-    if (vm[2])
+    if(vm[2])
     {
-        int c = vm[0] / 2, m = vm[1] / 2;
-        for (int i = 0; i < serverCnt; ++i)
+        int c = vm[0]/2, m = vm[1]/2;
+        for(int i=0;i<serverCnt;++i)
         {
             eServer &es = existServer[i];
-            if (es.resCpuA >= c && es.resCpuB >= c && es.resMermoryA >= m && es.resMermoryB >= m)
+            if(es.resCpuA>=c&&es.resCpuB>=c&&es.resMermoryA>=m&&es.resMermoryB>=m)
             {
                 //更新服务器信息
                 es.resCpuA -= c;
                 es.resCpuB -= c;
                 es.resMermoryA -= m;
                 es.resMermoryB -= m;
-                es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
-                es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
+                es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
+                es.CM_Ratio_B = es.resCpuB*1.0/es.resMermoryB;
 
                 //创建虚拟机信息
                 existVM[r.id].name = r.name;
-                // existVM[r.id].isA = ;
+                //existVM[r.id].isA = ;
                 existVM[r.id].serverID = i;
+
+                //输出信息
+                returnInfo(i);
                 return true;
             }
         }
@@ -232,51 +380,54 @@ bool Redistribution(req &r)
     {
         int c = vm[0], m = vm[1];
         // 后续希望建立红黑树，按CM_Ratio参数选择合适的服务器分配
-        for (int i = 0; i < serverCnt; ++i)
+        for(int i=0;i<serverCnt;++i)
         {
             eServer &es = existServer[i];
-            if (es.resCpuA >= c && es.resMermoryA >= m)
+            if(es.resCpuA>=c&&es.resMermoryA>=m)
             {
                 es.resCpuA -= c;
                 es.resMermoryA -= m;
-                es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
+                es.CM_Ratio_A = es.resCpuA*1.0/es.resMermoryA;
 
                 existVM[r.id].name = r.name;
                 existVM[r.id].isA = 1;
                 existVM[r.id].serverID = i;
+
+                returnInfo(i, 'A');
                 return true;
             }
-            else if (es.resCpuB >= c && es.resMermoryB >= m)
+            else if(es.resCpuB>=c&&es.resMermoryB>=m)
             {
                 es.resCpuB -= c;
                 es.resMermoryB -= m;
-                es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
+                es.CM_Ratio_B = es.resCpuB*1.0/es.resMermoryB;
 
                 existVM[r.id].name = r.name;
                 existVM[r.id].isA = 0;
                 existVM[r.id].serverID = i;
+
+                returnInfo(i, 'B');
                 return true;
             }
         }
     }
     return false;
 }
-
 // 每个请求队列分配服务器
 void applyServer(vector<req> &requests)
 {
     int choseServer = 0;
     string curNeedServer;
-    for (int i = 0; i < requests.size(); ++i)
+    for(int i=0;i<requests.size();++i)
     {
         // 如果存在的服务器分配未成功，则再分配
-        if (!Redistribution(requests[i]))
+        if(!Redistribution(requests[i]))
         {
             do
             {
                 curNeedServer = readyServer[choseServer];
-                int c = serverInfo[curNeedServer][0] / 2, m = serverInfo[curNeedServer][1] / 2;
-                float cm = c * 1.0 / m;
+                int c = serverInfo[curNeedServer][0]/2, m = serverInfo[curNeedServer][1]/2;
+                float cm = c*1.0/m;
                 existServer[serverCnt].name = curNeedServer;
                 existServer[serverCnt].resCpuA = c;
                 existServer[serverCnt].resCpuB = c;
@@ -285,90 +436,64 @@ void applyServer(vector<req> &requests)
                 existServer[serverCnt].CM_Ratio_A = cm;
                 existServer[serverCnt].CM_Ratio_B = cm;
                 choseServer++;
-            } while (!Specify_Resdist(vmInfo[requests[i].name], serverCnt));
-#ifdef TEST
+            }while(!Specify_Resdist(vmInfo[requests[i].name], serverCnt));
+
+            serverapply[curNeedServer]++;
+            serverCurCnt++;
+
+            #ifdef TEST
             priceSum += serverInfo[curNeedServer][2];
-#endif // TEST
+            #endif // TEST
+
             choseServer = 0;
             serverCnt++;
         }
     }
+    requests.clear();
 }
-
 void dataIO()
 {
-#ifdef TEST
+    #ifdef TEST
     string inputFile = "test.txt";
-    ifstream cin(inputFile);
-#endif // TEST
-    cin >> n;
-    for (int i = 0; i < n; ++i)
+    freopen(inputFile.c_str(), "rb", stdin);
+    #endif // TEST
+
+    n = getSingleNum();
+    for(int i=0;i<n;++i)
     {
-        cin >> name >> ncpu >> nG >> nprice >> nloss;
-        name = name.substr(1, name.size() - 2);
-        cpu = str2int(ncpu);
-        G = str2int(nG);
-        price = str2int(nprice);
-        loss = str2int(nloss);
-        serverInfo[name] = {cpu, G, price, loss};
+        getServerInfo();
     }
 
-    cin >> n;
-    for (int i = 0; i < n; ++i)
+    n = getSingleNum();
+    for(int i=0;i<n;++i)
     {
-        cin >> name >> ncpu >> nG >> nisdouble;
-        name = name.substr(1, name.size() - 1);
-        cpu = str2int(ncpu);
-        G = str2int(nG);
-        isdouble = nisdouble[0] - '0';
-        vmInfo[name] = {cpu, G, isdouble};
+        getVMInfo();
     }
 
-    cin >> n;
-    for (int i = 0; i < n; ++i)
+    n = getSingleNum();
+    for(int i=0;i<n;++i)
     {
-        cin >> m;
-        //重置当天需求
+        m = getSingleNum();
+        //重置需求队列
         needC = 0;
         needM = 0;
         maxC = 0;
         maxM = 0;
-        for (int j = 0; j < m; ++j)
+        for(int j=0;j<m;++j)
         {
-            cin >> name;
-            if ((isdouble = name[1] == 'a'))
-            {
-                // vm_name, vm_id
-                cin >> ncpu >> nG;
-                requests.emplace_back(isdouble, nG, ncpu);
-                needList[nG] = {vmInfo[ncpu][0], vmInfo[ncpu][1]};
-                needC += needList[nG][0];
-                needM += needList[nG][1];
-                maxC = max(maxC, needList[nG][0]);
-                maxM = max(maxM, needList[nG][1]);
-            }
-            else
-            {
-                // vm_id
-                cin >> nG;
-                requests.emplace_back(isdouble, nG, "");
-                //有些虚拟机可能是当天创建当天删除
-
-                needC -= needList[nG][0];
-                needM -= needList[nG][1];
-                needList.erase(nG);
-            }
+            getRequest();
         }
-        float need_CM_Radio = needC * 1.0 / needM;
-        readyServer = bestServers(need_CM_Radio, maxC, maxM);
+        float need_CM_Radio = needC*1.0/needM;
+        //readyServer = bestServers(need_CM_Radio, maxC, maxM);
         applyServer(requests);
+        serverCensus();
+        moveCensus();
+        infoOut();
     }
-#ifdef TEST
-    cout << priceSum << endl;
-    cin.close();
-#endif // TEST
+    #ifdef TEST
+    cout<<priceSum<<endl;
+    #endif // TEST
 }
-
 int main()
 {
     dataIO();
