@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <unordered_map>
@@ -104,7 +105,24 @@ int str2int(string &str)
 }
 
 // 找到最优服务器列表
-vector<string> bestServers(float CM_Radio, int maxCpu, int maxMemory);
+vector<string> bestServers(float CM_Radio, int maxCpu, int maxMemory)
+{
+    // todo: priority_queue<pair<string, vector<double>>> a;
+    vector<pair<string, vector<double>>> uniformedServers;
+    for (auto server : serverInfo)
+    {
+        vector<double> uInfo;
+        double uCpu = (double)server.second[0] / server.second[2] * 1000;
+        double uMemory = (double)server.second[1] / server.second[2] * 1000;
+        double projection = (uMemory * 1 + uCpu * CM_Radio) / (1 + sqrt(CM_Radio * CM_Radio));
+        uInfo.push_back(projection);
+        // ? make_pair()
+        uniformedServers.emplace_back(server.first, uInfo);
+    }
+    sort(uniformedServers.begin(), uniformedServers.end(),
+         [](pair<string, vector<double>> a, pair<string, vector<double>> b) { return a.second[2] > b.second[2]; });
+    return {uniformedServers.begin(), uniformedServers.begin() + 10};
+}
 
 // 指定服务器分配
 bool Specify_Resdist(vector<int> &vm, int id)
@@ -318,6 +336,7 @@ void dataIO()
             cin >> name;
             if (isdouble = name[1] == 'a')
             {
+                // vm_name, vm_id
                 cin >> ncpu >> nG;
                 requests.emplace_back(isdouble, nG, ncpu);
                 needList[nG] = {vmInfo[ncpu][0], vmInfo[ncpu][1]};
@@ -328,6 +347,7 @@ void dataIO()
             }
             else
             {
+                // vm_id
                 cin >> nG;
                 requests.emplace_back(isdouble, nG, "");
                 //有些虚拟机可能是当天创建当天删除
@@ -338,7 +358,7 @@ void dataIO()
             }
         }
         float need_CM_Radio = needC * 1.0 / needM;
-        // readyServer = bestServers(need_CM_Radio, maxC, maxM);
+        readyServer = bestServers(need_CM_Radio, maxC, maxM);
         applyServer(requests);
     }
 #ifdef TEST
