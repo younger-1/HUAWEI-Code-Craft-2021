@@ -108,20 +108,22 @@ int str2int(string &str)
 vector<string> bestServers(float CM_Radio, int maxCpu, int maxMemory)
 {
     // todo: priority_queue<pair<string, vector<double>>> a;
-    vector<pair<string, vector<double>>> uniformedServers;
+    vector<pair<string, float>> uniformedServers;
     for (auto server : serverInfo)
     {
-        vector<double> uInfo;
-        double uCpu = (double)server.second[0] / server.second[2] * 1000;
-        double uMemory = (double)server.second[1] / server.second[2] * 1000;
-        double projection = (uMemory * 1 + uCpu * CM_Radio) / (1 + sqrt(CM_Radio * CM_Radio));
-        uInfo.push_back(projection);
+        float uCpu = 1.0 * server.second[0] / server.second[2] * 1000;
+        float uMemory = 1.0 * server.second[1] / server.second[2] * 1000;
+        float projection = (uMemory * 1 + uCpu * CM_Radio) / (1 + sqrt(CM_Radio * CM_Radio));
         // ? make_pair()
-        uniformedServers.emplace_back(server.first, uInfo);
+        uniformedServers.emplace_back(server.first, projection);
     }
     sort(uniformedServers.begin(), uniformedServers.end(),
-         [](pair<string, vector<double>> a, pair<string, vector<double>> b) { return a.second[2] > b.second[2]; });
-    return {uniformedServers.begin(), uniformedServers.begin() + 10};
+         [](const pair<string, float> a, pair<string, float> b) { return a.second > b.second; });
+    int sizeOfServers = uniformedServers.size() / 10;
+    vector<string> res(sizeOfServers);
+    transform(uniformedServers.begin(), uniformedServers.begin() + sizeOfServers, res.begin(),
+              [](const pair<string, float> x) { return x.first; });
+    return res;
 }
 
 // 指定服务器分配
@@ -334,7 +336,7 @@ void dataIO()
         for (int j = 0; j < m; ++j)
         {
             cin >> name;
-            if (isdouble = name[1] == 'a')
+            if ((isdouble = name[1] == 'a'))
             {
                 // vm_name, vm_id
                 cin >> ncpu >> nG;
