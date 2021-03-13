@@ -354,8 +354,9 @@ void infoOut()
 //找到最优服务器列表
 vector<string> bestServers(float CM_Radio, int maxCpu, int maxMemory);
 //指定服务器分配
-bool Specify_Resdist(vector<int> &vm, int id)
+bool Specify_Resdist(string &vmName, int id, string & vmID)
 {
+    vector<int> &vm = vmInfo[vmName];
     eServer &es = existServer[id];
     if (vm[2])
     {
@@ -368,6 +369,9 @@ bool Specify_Resdist(vector<int> &vm, int id)
             es.resMermoryB -= m;
             es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
             es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
+
+            existVM[vmID].name = vmName;
+            existVM[vmID].serverID = id;
 
             // 申请虚拟机信息存储
             returnInfo(id);
@@ -387,6 +391,10 @@ bool Specify_Resdist(vector<int> &vm, int id)
             es.resMermoryA -= vm[1];
             es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
 
+            existVM[vmID].name = vmName;
+            existVM[vmID].isA = 0;
+            existVM[vmID].serverID = id;
+
             returnInfo(id, 'A');
 
             return true;
@@ -400,8 +408,10 @@ bool Redistribution(req &r)
     // 如果是删除操作
     if (!r.isadd)
     {
+
         // 存在的虚拟机信息
         eVM &ev = existVM[r.id];
+
         // 存在的服务器
         eServer &es = existServer[ev.serverID];
         // 存在的虚拟机格式
@@ -524,7 +534,7 @@ void applyServer(vector<req> &requests)
                 existServer[serverCnt].CM_Ratio_A = cm;
                 existServer[serverCnt].CM_Ratio_B = cm;
                 choseServer++;
-            } while (!Specify_Resdist(vmInfo[requests[i].name], serverCnt));
+            } while (!Specify_Resdist(requests[i].name, serverCnt, requests[i].id));
 
             serverapply[curNeedServer]++;
             serverCurCnt++;
@@ -542,8 +552,8 @@ void applyServer(vector<req> &requests)
 void dataIO()
 {
 #ifdef TEST
-    string inputFile = "training-data/training-1.txt";
-    string outputFile = "output.txt";
+    string inputFile = "training-data/training-2.txt";
+    string outputFile = "output1.txt";
     freopen(inputFile.c_str(), "rb", stdin);
     freopen(outputFile.c_str(), "wb", stdout);
 #endif // TEST
@@ -576,7 +586,9 @@ void dataIO()
         }
         float need_CM_Ratio = needC * 1.0 / needM;
         readyServer = bestServers(need_CM_Ratio, maxC, maxM);
+
         applyServer(requests);
+
         serverCensus();
         moveCensus();
         infoOut();
