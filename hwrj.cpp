@@ -324,7 +324,7 @@ void rserverInfo(const string &name, int num)
 void serverCensus()
 {
     string sss = "purchase";
-    rserverInfo(sss, serverCurCnt);
+    rserverInfo(sss, serverapply.size());
     for (auto &[k, v] : serverapply)
     {
         rserverInfo(k, v);
@@ -351,10 +351,8 @@ void infoOut()
         cout << VMapplyInfo[i] << endl;
     VMapplyInfo.clear();
 }
-//找到最优服务器列表
-vector<string> bestServers(float CM_Radio, int maxCpu, int maxMemory);
 //指定服务器分配
-bool Specify_Resdist(string &vmName, int id, string & vmID)
+bool Specify_Resdist(string &vmName, int id, string &vmID)
 {
     vector<int> &vm = vmInfo[vmName];
     eServer &es = existServer[id];
@@ -439,11 +437,11 @@ bool Redistribution(req &r)
             es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
         }
 
-        // 统计日均损耗
-        #ifdef TEST
-        if(serverInfo[es.name][0] == es.resCpuA+es.resCpuB)
+// 统计日均损耗
+#ifdef TEST
+        if (serverInfo[es.name][0] == es.resCpuA + es.resCpuB)
             dayloss -= serverInfo[es.name][3];
-        #endif // TEST
+#endif // TEST
 
         //删除虚拟机信息
         existVM.erase(r.id);
@@ -459,11 +457,11 @@ bool Redistribution(req &r)
             eServer &es = existServer[i];
             if (es.resCpuA >= c && es.resCpuB >= c && es.resMermoryA >= m && es.resMermoryB >= m)
             {
-                // 统计日均损耗
-                #ifdef TEST
-                if(serverInfo[es.name][0] == es.resCpuA+es.resCpuB)
+// 统计日均损耗
+#ifdef TEST
+                if (serverInfo[es.name][0] == es.resCpuA + es.resCpuB)
                     dayloss += serverInfo[es.name][3];
-                #endif // TEST
+#endif // TEST
 
                 //更新服务器信息
                 es.resCpuA -= c;
@@ -496,11 +494,11 @@ bool Redistribution(req &r)
             eServer &es = existServer[i];
             if (es.resCpuA >= c && es.resMermoryA >= m)
             {
-                // 统计日均损耗
-                #ifdef TEST
-                if(serverInfo[es.name][0] == es.resCpuA+es.resCpuB)
+// 统计日均损耗
+#ifdef TEST
+                if (serverInfo[es.name][0] == es.resCpuA + es.resCpuB)
                     dayloss += serverInfo[es.name][3];
-                #endif // TEST
+#endif // TEST
 
                 es.resCpuA -= c;
                 es.resMermoryA -= m;
@@ -515,11 +513,11 @@ bool Redistribution(req &r)
             }
             else if (es.resCpuB >= c && es.resMermoryB >= m)
             {
-                // 统计日均损耗
-                #ifdef TEST
-                if(serverInfo[es.name][0] == es.resCpuA+es.resCpuB)
+// 统计日均损耗
+#ifdef TEST
+                if (serverInfo[es.name][0] == es.resCpuA + es.resCpuB)
                     dayloss += serverInfo[es.name][3];
-                #endif // TEST
+#endif // TEST
 
                 es.resCpuB -= c;
                 es.resMermoryB -= m;
@@ -619,9 +617,9 @@ void dataIO()
         moveCensus();
         infoOut();
 
-        #ifdef TEST
+#ifdef TEST
         priceSum += dayloss;
-        #endif // TEST
+#endif // TEST
     }
 #ifdef TEST
     cout << priceSum << endl;
