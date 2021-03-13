@@ -4,6 +4,7 @@
 #include <iostream>
 #include <iterator>
 #include <queue>
+// #include <stdio.h>
 #include <time.h>
 #include <unordered_map>
 #include <vector>
@@ -232,24 +233,25 @@ vector<string> bestServers(float CM_Ratio, int maxCpu, int maxMemory)
     auto findIter =
         lower_bound(uniformedServers.begin(), uniformedServers.end(), CM_Ratio,
                     [](pair<string, ServerRatio> &server, float cm_R) { return server.second.ratio < cm_R; });
-    int sizeOfServers = uniformedServers.size() / 10;
+    int serverSize = uniformedServers.size();
+    int sizeOfServers = serverSize > 70 ? (serverSize << 3) : serverSize < 10 ? serverSize : 10;
     decltype(findIter) startIter = uniformedServers.begin();
     decltype(findIter) endIter = uniformedServers.end();
     int searchScale = 3;
-    if (findIter == uniformedServers.begin())
+    if (findIter == uniformedServers.begin() && searchScale * sizeOfServers < serverSize)
     {
         endIter = uniformedServers.begin() + searchScale * sizeOfServers;
     }
-    else if (findIter == uniformedServers.end())
+    else if (findIter == uniformedServers.end() && searchScale * sizeOfServers < serverSize)
     {
         startIter = uniformedServers.end() - searchScale * sizeOfServers;
     }
     else
     {
-        auto headDistance = findIter - uniformedServers.begin();
-        auto tailDistance = uniformedServers.end() - findIter;
-        startIter = headDistance > sizeOfServers ? (findIter - sizeOfServers) : uniformedServers.begin();
-        endIter = tailDistance > sizeOfServers ? (findIter + sizeOfServers) : uniformedServers.end();
+        if (findIter - uniformedServers.begin() > sizeOfServers)
+            startIter = findIter - sizeOfServers;
+        if (uniformedServers.end() - findIter > sizeOfServers)
+            endIter = findIter + sizeOfServers;
     }
 
     double mean = 0;
@@ -540,8 +542,10 @@ void applyServer(vector<req> &requests)
 void dataIO()
 {
 #ifdef TEST
-    string inputFile = "test.txt";
+    string inputFile = "training-data/training-1.txt";
+    string outputFile = "output.txt";
     freopen(inputFile.c_str(), "rb", stdin);
+    freopen(outputFile.c_str(), "wb", stdout);
 #endif // TEST
 
     n = getSingleNum();
@@ -549,6 +553,7 @@ void dataIO()
     {
         getServerInfo();
     }
+    initUniformedServers();
 
     n = getSingleNum();
     for (int i = 0; i < n; ++i)
@@ -570,7 +575,7 @@ void dataIO()
             getRequest();
         }
         float need_CM_Ratio = needC * 1.0 / needM;
-        // readyServer = bestServers(need_CM_Ratio, maxC, maxM);
+        readyServer = bestServers(need_CM_Ratio, maxC, maxM);
         applyServer(requests);
         serverCensus();
         moveCensus();
