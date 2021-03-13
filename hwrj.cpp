@@ -4,7 +4,7 @@
 #include <iostream>
 #include <iterator>
 #include <queue>
-// #include <stdio.h>
+#include <stdio.h>
 #include <time.h>
 #include <unordered_map>
 #include <vector>
@@ -16,7 +16,7 @@
 using namespace std;
 
 #ifdef TEST
-int priceSum = 0, lossSum = 0;
+int priceSum = 0, dayloss = 0;
 #endif // TEST
 
 struct req
@@ -438,6 +438,13 @@ bool Redistribution(req &r)
             es.resMermoryB += vm[1];
             es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
         }
+
+        // 统计日均损耗
+        #ifdef TEST
+        if(serverInfo[es.name][0] == es.resCpuA+es.resCpuB)
+            dayloss -= serverInfo[es.name][3];
+        #endif // TEST
+
         //删除虚拟机信息
         existVM.erase(r.id);
         return true;
@@ -452,6 +459,12 @@ bool Redistribution(req &r)
             eServer &es = existServer[i];
             if (es.resCpuA >= c && es.resCpuB >= c && es.resMermoryA >= m && es.resMermoryB >= m)
             {
+                // 统计日均损耗
+                #ifdef TEST
+                if(serverInfo[es.name][0] == es.resCpuA+es.resCpuB)
+                    dayloss += serverInfo[es.name][3];
+                #endif // TEST
+
                 //更新服务器信息
                 es.resCpuA -= c;
                 es.resCpuB -= c;
@@ -483,6 +496,12 @@ bool Redistribution(req &r)
             eServer &es = existServer[i];
             if (es.resCpuA >= c && es.resMermoryA >= m)
             {
+                // 统计日均损耗
+                #ifdef TEST
+                if(serverInfo[es.name][0] == es.resCpuA+es.resCpuB)
+                    dayloss += serverInfo[es.name][3];
+                #endif // TEST
+
                 es.resCpuA -= c;
                 es.resMermoryA -= m;
                 es.CM_Ratio_A = es.resCpuA * 1.0 / es.resMermoryA;
@@ -496,6 +515,12 @@ bool Redistribution(req &r)
             }
             else if (es.resCpuB >= c && es.resMermoryB >= m)
             {
+                // 统计日均损耗
+                #ifdef TEST
+                if(serverInfo[es.name][0] == es.resCpuA+es.resCpuB)
+                    dayloss += serverInfo[es.name][3];
+                #endif // TEST
+
                 es.resCpuB -= c;
                 es.resMermoryB -= m;
                 es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
@@ -540,6 +565,7 @@ void applyServer(vector<req> &requests)
             serverCurCnt++;
 
 #ifdef TEST
+            dayloss += serverInfo[curNeedServer][3];
             priceSum += serverInfo[curNeedServer][2];
 #endif // TEST
 
@@ -552,8 +578,8 @@ void applyServer(vector<req> &requests)
 void dataIO()
 {
 #ifdef TEST
-    string inputFile = "training-data/training-2.txt";
-    string outputFile = "output1.txt";
+    string inputFile = "training-data/training-1.txt";
+    string outputFile = "output.txt";
     freopen(inputFile.c_str(), "rb", stdin);
     freopen(outputFile.c_str(), "wb", stdout);
 #endif // TEST
@@ -592,6 +618,10 @@ void dataIO()
         serverCensus();
         moveCensus();
         infoOut();
+
+        #ifdef TEST
+        priceSum += dayloss;
+        #endif // TEST
     }
 #ifdef TEST
     cout << priceSum << endl;
