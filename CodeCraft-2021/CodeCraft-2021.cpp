@@ -325,9 +325,9 @@ void serverCensus()
 {
     string sss = "purchase";
     rserverInfo(sss, serverapply.size());
-    for (auto &[k, v] : serverapply)
+    for (auto s : serverapply)
     {
-        rserverInfo(k, v);
+        rserverInfo(s.first, s.second);
     }
     serverapply.clear();
     serverCurCnt = 0;
@@ -351,8 +351,6 @@ void infoOut()
         cout << VMapplyInfo[i] << endl;
     VMapplyInfo.clear();
 }
-//找到最优服务器列表
-vector<string> bestServers(float CM_Radio, int maxCpu, int maxMemory);
 //指定服务器分配
 bool Specify_Resdist(string &vmName, int id, string &vmID)
 {

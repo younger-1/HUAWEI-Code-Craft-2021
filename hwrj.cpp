@@ -325,9 +325,9 @@ void serverCensus()
 {
     string sss = "purchase";
     rserverInfo(sss, serverapply.size());
-    for (auto &[k, v] : serverapply)
+    for (auto s : serverapply)
     {
-        rserverInfo(k, v);
+        rserverInfo(s.first, s.second);
     }
     serverapply.clear();
     serverCurCnt = 0;
