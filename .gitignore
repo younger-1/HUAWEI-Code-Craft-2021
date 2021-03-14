@@ -4,7 +4,9 @@
 
 *.exe
 
-test*
+test.cc
+test.sh
+test.txt
 
 /output.txt
 

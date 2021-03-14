@@ -369,6 +369,7 @@ bool Specify_Resdist(string &vmName, int id, string &vmID)
             es.CM_Ratio_B = es.resCpuB * 1.0 / es.resMermoryB;
 
             existVM[vmID].name = vmName;
+            existVM[vmID].isA = 1;
             existVM[vmID].serverID = id;
 
             // 申请虚拟机信息存储
@@ -576,7 +577,7 @@ void applyServer(vector<req> &requests)
 void dataIO()
 {
 #ifdef TEST
-    string inputFile = "training-data/training-1.txt";
+    string inputFile = "test.txt";
     string outputFile = "output.txt";
     freopen(inputFile.c_str(), "rb", stdin);
     freopen(outputFile.c_str(), "wb", stdout);

@@ -322,7 +322,7 @@ int main()
     //#ifdef TEST
     //    std::freopen(filePath.c_str(),"rb",stdin);
     //#endif
-    // std::freopen(filePath.c_str(), "rb", stdin);
+    std::freopen(filePath.c_str(), "rb", stdin);
     int serverNum;
     string serverType, cpuCores, memorySize, serverCost, powerCost;
     scanf("%d", &serverNum);
