@@ -24,16 +24,15 @@ struct ExistServer
 {
     int remainCpuA, remainCpuB, remainMemA, remainMemB;
     float CM_Ratio_A, CM_Ratio_B;
-    string name;
+    string serverType;
 };
 
 // 存在的虚拟机信息
-//
 struct ExistVM
 {
     string vmType;
     int serverIndex;
-    bool isA;
+    bool isTwoNode;
 };
 
 struct Request
@@ -68,7 +67,7 @@ Description:
 int priceSum = 0, dayCostSum = 0;
 #endif // TEST
 
-// serverInfo[name] = {cpu, memory, price, dayCost};
+// serverInfo[serverType] = {cpu, memory, price, dayCost};
 // eg. (NV603, 8, 32, 53800, 500)
 unordered_map<string, vector<int>> serverInfo;
 
@@ -82,22 +81,27 @@ unordered_map<string, ExistVM> existVM;
 // serverIndex => ExistServer
 unordered_map<int, ExistServer> existServer;
 
-// 统计当前所需CPU，MEMORY所用map
+// 统计当前所需CPU，MEMORY
+// vmID => {CPU, MEM}
 unordered_map<string, vector<int>> needList;
+
 // 当前队列待选服务器型号（必须包含容量大于任意请求的服务器大小）
 vector<string> readyServer = {"NV603"};
 
 // 当次队列购买的服务器
 unordered_map<string, int> serverapply;
+
 // 当次队列购买的服务器总数
-int serverCurCnt = 0;
+int curServerCnt = 0;
 
 // 服务器总数
 int serverCnt = 0;
+
 // 当前最匹配服务器
 string curNeedServer;
+
 // 当次队列申请的虚拟机与服务器与迁移输出信息
-vector<string> VMapplyInfo, serverapplyInfo, moveInfo;
+vector<string> vmApplyInfo, serverapplyInfo, moveInfo;
 
 vector<Request> requests;
 
@@ -139,7 +143,7 @@ void returnInfo(int index, char kind = 'D')
         vmaly += int2str(index);
         vmaly += ", ";
         vmaly += "A)";
-        VMapplyInfo.emplace_back(vmaly);
+        vmApplyInfo.emplace_back(vmaly);
     }
     else if (kind == 'B')
     {
@@ -147,14 +151,14 @@ void returnInfo(int index, char kind = 'D')
         vmaly += int2str(index);
         vmaly += ", ";
         vmaly += "B)";
-        VMapplyInfo.emplace_back(vmaly);
+        vmApplyInfo.emplace_back(vmaly);
     }
     else
     {
         vmaly += "(";
         vmaly += int2str(index);
         vmaly += ")";
-        VMapplyInfo.emplace_back(vmaly);
+        vmApplyInfo.emplace_back(vmaly);
     }
 }
 
@@ -181,7 +185,7 @@ bool addNewServer(string &_vmType, int _index, string &_vmID)
             es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
 
             existVM[_vmID].vmType = _vmType;
-            existVM[_vmID].isA = 1;
+            existVM[_vmID].isTwoNode = 1;
             existVM[_vmID].serverIndex = _index;
 
             // 申请虚拟机信息存储
@@ -203,7 +207,7 @@ bool addNewServer(string &_vmType, int _index, string &_vmID)
             es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
 
             existVM[_vmID].vmType = _vmType;
-            existVM[_vmID].isA = 0;
+            existVM[_vmID].isTwoNode = 0;
             existVM[_vmID].serverIndex = _index;
 
             returnInfo(_index, 'A');
@@ -238,7 +242,7 @@ bool redistribution(Request &r)
             es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
             es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
         }
-        else if (ev.isA)
+        else if (ev.isTwoNode)
         {
             es.remainCpuA += vm[0];
             es.remainMemA += vm[1];
@@ -253,8 +257,8 @@ bool redistribution(Request &r)
 
 // 统计日均损耗
 #ifdef TEST
-        if (serverInfo[es.name][0] == es.remainCpuA + es.remainCpuB)
-            dayCostSum -= serverInfo[es.name][3];
+        if (serverInfo[es.serverType][0] == es.remainCpuA + es.remainCpuB)
+            dayCostSum -= serverInfo[es.serverType][3];
 #endif // TEST
 
         //删除虚拟机信息
@@ -273,8 +277,8 @@ bool redistribution(Request &r)
             {
 // 统计日均损耗
 #ifdef TEST
-                if (serverInfo[es.name][0] == es.remainCpuA + es.remainCpuB)
-                    dayCostSum += serverInfo[es.name][3];
+                if (serverInfo[es.serverType][0] == es.remainCpuA + es.remainCpuB)
+                    dayCostSum += serverInfo[es.serverType][3];
 #endif // TEST
 
                 //更新服务器信息
@@ -287,7 +291,6 @@ bool redistribution(Request &r)
 
                 //创建虚拟机信息
                 existVM[r.vmID].vmType = r.vmType;
-                // existVM[r.id].isA = ;
                 existVM[r.vmID].serverIndex = i;
 
                 //输出信息
@@ -310,8 +313,8 @@ bool redistribution(Request &r)
             {
 // 统计日均损耗
 #ifdef TEST
-                if (serverInfo[es.name][0] == es.remainCpuA + es.remainCpuB)
-                    dayCostSum += serverInfo[es.name][3];
+                if (serverInfo[es.serverType][0] == es.remainCpuA + es.remainCpuB)
+                    dayCostSum += serverInfo[es.serverType][3];
 #endif // TEST
 
                 es.remainCpuA -= c;
@@ -319,7 +322,7 @@ bool redistribution(Request &r)
                 es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
 
                 existVM[r.vmID].vmType = r.vmType;
-                existVM[r.vmID].isA = 1;
+                existVM[r.vmID].isTwoNode = 1;
                 existVM[r.vmID].serverIndex = i;
 
                 returnInfo(i, 'A');
@@ -329,8 +332,8 @@ bool redistribution(Request &r)
             {
 // 统计日均损耗
 #ifdef TEST
-                if (serverInfo[es.name][0] == es.remainCpuA + es.remainCpuB)
-                    dayCostSum += serverInfo[es.name][3];
+                if (serverInfo[es.serverType][0] == es.remainCpuA + es.remainCpuB)
+                    dayCostSum += serverInfo[es.serverType][3];
 #endif // TEST
 
                 es.remainCpuB -= c;
@@ -338,7 +341,7 @@ bool redistribution(Request &r)
                 es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
 
                 existVM[r.vmID].vmType = r.vmType;
-                existVM[r.vmID].isA = 0;
+                existVM[r.vmID].isTwoNode = 0;
                 existVM[r.vmID].serverIndex = i;
 
                 returnInfo(i, 'B');
@@ -364,7 +367,7 @@ void applyServer(vector<Request> &requests)
                 curNeedServer = readyServer[choseServer];
                 int c = serverInfo[curNeedServer][0] / 2, m = serverInfo[curNeedServer][1] / 2;
                 float cm = c * 1.0 / m;
-                existServer[serverCnt].name = curNeedServer;
+                existServer[serverCnt].serverType = curNeedServer;
                 existServer[serverCnt].remainCpuA = c;
                 existServer[serverCnt].remainCpuB = c;
                 existServer[serverCnt].remainMemA = m;
@@ -375,7 +378,7 @@ void applyServer(vector<Request> &requests)
             } while (!addNewServer(requests[i].vmType, serverCnt, requests[i].vmID));
 
             serverapply[curNeedServer]++;
-            serverCurCnt++;
+            curServerCnt++;
 
 #ifdef TEST
             dayCostSum += serverInfo[curNeedServer][3];
@@ -611,7 +614,7 @@ void serverCensus()
         rserverInfo(s.first, s.second);
     }
     serverapply.clear();
-    serverCurCnt = 0;
+    curServerCnt = 0;
 }
 
 // 统计迁移信息
@@ -630,9 +633,9 @@ void infoOut()
     for (int i = 0; i < moveInfo.size(); ++i)
         cout << moveInfo[i] << endl;
     moveInfo.clear();
-    for (int i = 0; i < VMapplyInfo.size(); ++i)
-        cout << VMapplyInfo[i] << endl;
-    VMapplyInfo.clear();
+    for (int i = 0; i < vmApplyInfo.size(); ++i)
+        cout << vmApplyInfo[i] << endl;
+    vmApplyInfo.clear();
 }
 
 /*************************************************
