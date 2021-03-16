@@ -81,7 +81,7 @@ unordered_map<string, ExistVM> existVM;
 // serverIndex => ExistServer
 unordered_map<int, ExistServer> existServer;
 
-// 统计当前所需CPU，MEMORY
+// 统计所有虚拟机的CPU，MEMORY需求
 // vmID => {CPU, MEM}
 unordered_map<string, vector<int>> needList;
 
@@ -103,7 +103,9 @@ string curNeedServer;
 // 当次队列申请的虚拟机与服务器与迁移输出信息
 vector<string> vmApplyInfo, serverapplyInfo, moveInfo;
 
-vector<Request> requests;
+vector<Request> dayRequests;
+
+vector<vector<Request>> allRequests;
 
 /*************************************************
 Name: Unused variables
@@ -353,14 +355,14 @@ bool redistribution(Request &r)
 }
 
 // 每个请求队列分配服务器
-void applyServer(vector<Request> &requests)
+void applyServer()
 {
     int choseServer = 0;
     string curNeedServer;
-    for (int i = 0; i < requests.size(); ++i)
+    for (int i = 0; i < dayRequests.size(); ++i)
     {
         // 如果存在的服务器分配未成功，则再分配
-        if (!redistribution(requests[i]))
+        if (!redistribution(dayRequests[i]))
         {
             do
             {
@@ -375,7 +377,7 @@ void applyServer(vector<Request> &requests)
                 existServer[serverCnt].CM_Ratio_A = cm;
                 existServer[serverCnt].CM_Ratio_B = cm;
                 choseServer++;
-            } while (!addNewServer(requests[i].vmType, serverCnt, requests[i].vmID));
+            } while (!addNewServer(dayRequests[i].vmType, serverCnt, dayRequests[i].vmID));
 
             serverapply[curNeedServer]++;
             curServerCnt++;
@@ -389,7 +391,10 @@ void applyServer(vector<Request> &requests)
             serverCnt++;
         }
     }
-    requests.clear();
+
+    // ? move()
+    allRequests.push_back(dayRequests);
+    dayRequests.clear();
 }
 
 /*************************************************
@@ -504,7 +509,9 @@ string serverType, vmType, vmID;
 // 读入存储临时变量
 int cpu, memory, price, loss, isTwoNode, isAdd;
 // 当前决策需要的CPU和Memory
-int needC = 0, needM = 0, maxC = 0, maxM = 0;
+int dayNeedCpu = 0, dayNeedMem = 0, maxC = 0, maxM = 0;
+
+int sumNeedCpu = 0, sumNeedMem = 0;
 
 // 读取请求
 void readRequest()
@@ -524,8 +531,8 @@ void readRequest()
         while ((c = getchar()) != ')')
             vmID += c;
         needList[vmID] = {vmInfo[vmType][0], vmInfo[vmType][1]};
-        needC += needList[vmID][0];
-        needM += needList[vmID][1];
+        dayNeedCpu += needList[vmID][0];
+        dayNeedMem += needList[vmID][1];
         maxC = max(maxC, needList[vmID][0]);
         maxM = max(maxM, needList[vmID][1]);
     }
@@ -536,12 +543,12 @@ void readRequest()
         getchar();
         while ((c = getchar()) != ')')
             vmID += c;
-        needC -= needList[vmID][0];
-        needM -= needList[vmID][1];
+        dayNeedCpu -= needList[vmID][0];
+        dayNeedMem -= needList[vmID][1];
         needList.erase(vmID);
     }
     getchar();
-    requests.emplace_back(isAdd, vmID, vmType);
+    dayRequests.emplace_back(isAdd, vmID, vmType);
 }
 
 // 按行读取虚拟机信息
@@ -646,7 +653,7 @@ Description:
 void processIO()
 {
 #ifdef TEST
-    string inputFile = "training-data/training-2.txt";
+    string inputFile = "training.txt";
     string outputFile = "output.txt";
     freopen(inputFile.c_str(), "rb", stdin);
     freopen(outputFile.c_str(), "wb", stdout);
@@ -670,18 +677,19 @@ void processIO()
     {
         m = readSingleNum();
         //重置需求队列
-        needC = 0;
-        needM = 0;
+        dayNeedCpu = 0;
+        dayNeedMem = 0;
         maxC = 0;
         maxM = 0;
         for (int j = 0; j < m; ++j)
         {
             readRequest();
         }
-        float need_CM_Ratio = needC * 1.0 / needM;
-        readyServer = bestServers(need_CM_Ratio, maxC, maxM);
 
-        applyServer(requests);
+        float dayNeed_CM_Ratio = dayNeedCpu * 1.0 / dayNeedMem;
+        readyServer = bestServers(dayNeed_CM_Ratio, maxC, maxM);
+
+        applyServer();
 
         serverCensus();
         moveCensus();
