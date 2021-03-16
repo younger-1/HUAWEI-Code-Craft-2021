@@ -85,7 +85,7 @@ unordered_map<int, ExistServer> existServer;
 vector<string> readyServer = {"NV603"};
 
 // 当次队列购买的服务器
-unordered_map<string, int> serverapply;
+unordered_map<string, int> serverApplyNumber;
 
 // 当次队列购买的服务器总数
 int curServerCnt = 0;
@@ -170,7 +170,7 @@ Description: Scheduling and optimization
 **************************************************/
 
 // 指定服务器分配
-bool addNewServer(string &_vmType, int _index, string &_vmID)
+bool addNewServer(string &_vmType, string &_vmID, int _index)
 {
     vector<int> &vm = vmInfo[_vmType];
     ExistServer &es = existServer[_index];
@@ -199,23 +199,20 @@ bool addNewServer(string &_vmType, int _index, string &_vmID)
     // 单端分配情况，优化点
     //????????????????????????
     //????????????????????????
-    else
+    else if (es.remainCpuA >= vm[0] && es.remainMemA >= vm[1])
     {
         // 后续希望建立红黑树，按CM_Ratio参数选择合适的服务器分配
-        if (es.remainCpuA >= vm[0] && es.remainMemA >= vm[1])
-        {
-            es.remainCpuA -= vm[0];
-            es.remainMemA -= vm[1];
-            es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
+        es.remainCpuA -= vm[0];
+        es.remainMemA -= vm[1];
+        es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
 
-            existVM[_vmID].vmType = _vmType;
-            existVM[_vmID].isTwoNode = 0;
-            existVM[_vmID].serverIndex = _index;
+        existVM[_vmID].vmType = _vmType;
+        existVM[_vmID].isTwoNode = 0;
+        existVM[_vmID].serverIndex = _index;
 
-            returnInfo(_index, 'A');
+        returnInfo(_index, 'A');
 
-            return true;
-        }
+        return true;
     }
     return false;
 }
@@ -377,9 +374,9 @@ void applyServer()
                 existServer[serverCnt].CM_Ratio_A = cm;
                 existServer[serverCnt].CM_Ratio_B = cm;
                 choseServer++;
-            } while (!addNewServer(dayRequests[i].vmType, serverCnt, dayRequests[i].vmID));
+            } while (!addNewServer(dayRequests[i].vmType, dayRequests[i].vmID, serverCnt));
 
-            serverapply[curNeedServer]++;
+            serverApplyNumber[curNeedServer]++;
             curServerCnt++;
 
 #ifdef TEST
@@ -391,10 +388,37 @@ void applyServer()
             serverCnt++;
         }
     }
+}
 
-    // ? move()
-    allRequests.push_back(dayRequests);
-    dayRequests.clear();
+void allApplyServer()
+{
+    string serverType = readyServer[0];
+    int serverIndex = 0, _cpu = 0, _mem = 0;
+    float _CM = 0.0;
+    for (int i = 0; i < allRequests.size(); i++)
+    {
+        auto &_dayRequests = allRequests[i];
+        for (int j = 0; j < _dayRequests.size(); j++)
+        {
+            if (!redistribution(_dayRequests[j]))
+            {
+                _cpu = serverInfo[serverType][0] / 2, _mem = serverInfo[serverType][1] / 2;
+                _CM = _cpu * 1.0 / _mem;
+                existServer[serverIndex].serverType = serverType;
+                existServer[serverIndex].remainCpuA = _cpu;
+                existServer[serverIndex].remainCpuB = _cpu;
+                existServer[serverIndex].remainMemA = _mem;
+                existServer[serverIndex].remainMemB = _mem;
+                existServer[serverIndex].CM_Ratio_A = _CM;
+                existServer[serverIndex].CM_Ratio_B = _CM;
+
+                addNewServer(_dayRequests[j].vmType, _dayRequests[j].vmID, serverIndex);
+
+                serverApplyNumber[serverType]++;
+                serverIndex += 1;
+            }
+        }
+    }
 }
 
 /*************************************************
@@ -628,12 +652,12 @@ void rserverInfo(const string &name, int num)
 void serverCensus()
 {
     string sss = "purchase";
-    rserverInfo(sss, serverapply.size());
-    for (auto s : serverapply)
+    rserverInfo(sss, serverApplyNumber.size());
+    for (auto s : serverApplyNumber)
     {
         rserverInfo(s.first, s.second);
     }
-    serverapply.clear();
+    serverApplyNumber.clear();
     curServerCnt = 0;
 }
 
@@ -712,12 +736,16 @@ void processIO()
         // #ifdef TEST
         //         priceSum += dayCostSum;
         // #endif // TEST
+
+        // ? move()
+        allRequests.push_back(dayRequests);
+        dayRequests.clear();
     }
 
     float all_CM_Ratio = allNeedCpu * 1.0 / allNeedMem;
     readyServer = bestServers(all_CM_Ratio, maxC, maxM);
 
-    applyServer();
+    allApplyServer();
 
     serverCensus();
     moveCensus();
