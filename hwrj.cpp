@@ -81,10 +81,6 @@ unordered_map<string, ExistVM> existVM;
 // serverIndex => ExistServer
 unordered_map<int, ExistServer> existServer;
 
-// 统计所有虚拟机的CPU，MEMORY需求
-// vmID => {CPU, MEM}
-unordered_map<string, vector<int>> needList;
-
 // 当前队列待选服务器型号（必须包含容量大于任意请求的服务器大小）
 vector<string> readyServer = {"NV603"};
 
@@ -111,6 +107,10 @@ vector<vector<Request>> allRequests;
 Name: Unused variables
 Description:
 **************************************************/
+
+// 统计所有虚拟机的CPU，MEMORY需求
+// vmID => {CPU, MEM}
+unordered_map<string, vector<int>> needList;
 
 // 上两日操作消息
 vector<string> infoLog;
@@ -402,7 +402,9 @@ Name: Pick server
 Description:
 **************************************************/
 
+// Pair of <serverType, ServerRatio>
 vector<pair<string, ServerRatio>> uniformedServers;
+
 void initUniformedServers()
 {
     // todo: priority_queue<pair<string, vector<double>>> a;
@@ -423,54 +425,56 @@ void initUniformedServers()
 // todo: dayLoss
 vector<string> bestServers(float CM_Ratio, int maxCpu, int maxMemory)
 {
-    // lower_bound(beg, end, val, comp)
+    // usage: lower_bound(beg, end, val, comp)
     auto findIter =
         lower_bound(uniformedServers.begin(), uniformedServers.end(), CM_Ratio,
-                    [](pair<string, ServerRatio> &server, float cm_R) { return server.second.ratio < cm_R; });
-    int serverSize = uniformedServers.size();
-    int sizeOfServers = serverSize > 70 ? (serverSize << 3) : serverSize < 10 ? serverSize : 10;
+                    [](pair<string, ServerRatio> &server, float CM_R) { return server.second.ratio < CM_R; });
+
     decltype(findIter) startIter = uniformedServers.begin();
     decltype(findIter) endIter = uniformedServers.end();
+
+    int totalServer = uniformedServers.size();
+    int returnSize = totalServer > 50 ? (totalServer / 10) : totalServer < 5 ? totalServer : 5;
+
     int searchScale = 3;
-    if (findIter == uniformedServers.begin() && searchScale * sizeOfServers < serverSize)
+    if (findIter == uniformedServers.begin() && searchScale * returnSize < totalServer)
     {
-        endIter = uniformedServers.begin() + searchScale * sizeOfServers;
+        endIter = uniformedServers.begin() + searchScale * returnSize;
     }
-    else if (findIter == uniformedServers.end() && searchScale * sizeOfServers < serverSize)
+    else if (findIter == uniformedServers.end() && searchScale * returnSize < totalServer)
     {
-        startIter = uniformedServers.end() - searchScale * sizeOfServers;
+        startIter = uniformedServers.end() - searchScale * returnSize;
     }
     else
     {
-        if (findIter - uniformedServers.begin() > sizeOfServers)
-            startIter = findIter - sizeOfServers;
-        if (uniformedServers.end() - findIter > sizeOfServers)
-            endIter = findIter + sizeOfServers;
+        if (findIter - uniformedServers.begin() > returnSize)
+            startIter = findIter - returnSize;
+        if (uniformedServers.end() - findIter > returnSize)
+            endIter = findIter + returnSize;
     }
 
-    double mean = 0;
     for (auto it = startIter; it != endIter; ++it)
     {
-        it->second.projection = (it->second.uMemory * 1 + it->second.uCpu * CM_Ratio) / (1 + sqrt(CM_Ratio * CM_Ratio));
-        mean += it->second.projection;
+        it->second.projection = (it->second.uMemory * 1 + it->second.uCpu * CM_Ratio) / sqrt(1 + CM_Ratio * CM_Ratio);
     }
-    mean /= (endIter - startIter);
+
+    vector<size_t> bestServersIndex;
+    bestServersIndex.reserve(distance(startIter, endIter));
+
+    for (auto it = startIter; it != endIter; ++it)
+    {
+        if (serverInfo[it->first][0] < (maxCpu << 1) || serverInfo[it->first][1] < (maxMemory << 1))
+            continue;
+        bestServersIndex.push_back(it - uniformedServers.begin());
+    }
+    sort(bestServersIndex.begin(), bestServersIndex.end(),
+         [&](int a, int b) { return uniformedServers[a].second.projection > uniformedServers[b].second.projection; });
 
     vector<string> bestServers;
-    bestServers.reserve(sizeOfServers);
-    float meanScale = 1.0;
-    while (bestServers.size() < sizeOfServers)
+    bestServers.reserve(bestServersIndex.size());
+    for (auto i : bestServersIndex)
     {
-        meanScale /= 2;
-        for (auto it = startIter; it != endIter; ++it)
-        {
-            if (serverInfo[it->first][0] < (maxCpu << 1) || serverInfo[it->first][1] < (maxMemory << 1))
-                continue;
-            if (it->second.projection > mean * (1 + meanScale) && bestServers.size() != sizeOfServers)
-            {
-                bestServers.push_back(it->first);
-            }
-        }
+        bestServers.push_back(uniformedServers[i].first);
     }
     return bestServers;
 }
@@ -511,7 +515,7 @@ int cpu, memory, price, loss, isTwoNode, isAdd;
 // 当前决策需要的CPU和Memory
 int dayNeedCpu = 0, dayNeedMem = 0, maxC = 0, maxM = 0;
 
-int sumNeedCpu = 0, sumNeedMem = 0;
+int allNeedCpu = 0, allNeedMem = 0;
 
 // 读取请求
 void readRequest()
@@ -531,8 +535,12 @@ void readRequest()
         while ((c = getchar()) != ')')
             vmID += c;
         needList[vmID] = {vmInfo[vmType][0], vmInfo[vmType][1]};
-        dayNeedCpu += needList[vmID][0];
-        dayNeedMem += needList[vmID][1];
+        // dayNeedCpu += needList[vmID][0];
+        // dayNeedMem += needList[vmID][1];
+
+        allNeedCpu += needList[vmID][0];
+        allNeedMem += needList[vmID][1];
+
         maxC = max(maxC, needList[vmID][0]);
         maxM = max(maxM, needList[vmID][1]);
     }
@@ -543,8 +551,13 @@ void readRequest()
         getchar();
         while ((c = getchar()) != ')')
             vmID += c;
-        dayNeedCpu -= needList[vmID][0];
-        dayNeedMem -= needList[vmID][1];
+
+        // dayNeedCpu -= needList[vmID][0];
+        // dayNeedMem -= needList[vmID][1];
+
+        allNeedCpu -= needList[vmID][0];
+        allNeedMem -= needList[vmID][1];
+
         needList.erase(vmID);
     }
     getchar();
@@ -676,29 +689,44 @@ void processIO()
     for (int i = 0; i < n; ++i)
     {
         m = readSingleNum();
-        //重置需求队列
-        dayNeedCpu = 0;
-        dayNeedMem = 0;
-        maxC = 0;
-        maxM = 0;
+
+        // 重置需求队列
+        // dayNeedCpu = 0;
+        // dayNeedMem = 0;
+        // maxC = 0;
+        // maxM = 0;
+
         for (int j = 0; j < m; ++j)
         {
             readRequest();
         }
+        // float dayNeed_CM_Ratio = dayNeedCpu * 1.0 / dayNeedMem;
+        // readyServer = bestServers(dayNeed_CM_Ratio, maxC, maxM);
 
-        float dayNeed_CM_Ratio = dayNeedCpu * 1.0 / dayNeedMem;
-        readyServer = bestServers(dayNeed_CM_Ratio, maxC, maxM);
+        // applyServer();
 
-        applyServer();
+        // serverCensus();
+        // moveCensus();
+        // infoOut();
 
-        serverCensus();
-        moveCensus();
-        infoOut();
-
-#ifdef TEST
-        priceSum += dayCostSum;
-#endif // TEST
+        // #ifdef TEST
+        //         priceSum += dayCostSum;
+        // #endif // TEST
     }
+
+    float all_CM_Ratio = allNeedCpu * 1.0 / allNeedMem;
+    readyServer = bestServers(all_CM_Ratio, maxC, maxM);
+
+    applyServer();
+
+    serverCensus();
+    moveCensus();
+    infoOut();
+
+    // #ifdef TEST
+    //         priceSum += dayCostSum;
+    // #endif // TEST
+
 #ifdef TEST
     cout << priceSum << endl;
 #endif // TEST
