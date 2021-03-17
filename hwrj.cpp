@@ -100,6 +100,10 @@ string curNeedServer;
 // 当次队列申请的虚拟机与服务器与迁移输出信息
 vector<string> vmApplyInfo, serverapplyInfo, moveInfo;
 
+// 统计虚拟机的CPU，MEMORY需求, eg.要删除的虚拟机是当天创建的
+// vmID => {CPU, MEM}
+unordered_map<string, vector<int>> needList;
+
 vector<Request> dayRequests;
 
 vector<vector<Request>> allRequests;
@@ -108,10 +112,6 @@ vector<vector<Request>> allRequests;
 Name: Unused variables
 Description:
 **************************************************/
-
-// 统计所有虚拟机的CPU，MEMORY需求
-// vmID => {CPU, MEM}
-unordered_map<string, vector<int>> needList;
 
 // 上两日操作消息
 vector<string> infoLog;
@@ -389,7 +389,7 @@ void applyServer()
             priceSum += serverInfo[curNeedServer][2];
 #endif // TEST
 
-            // choseServer = 0;
+            choseServer = 0;
             serverCnt++;
         }
     }
@@ -570,14 +570,9 @@ void readRequest()
         maxC = max(maxC, vmInfo[vmType][2] ? vmInfo[vmType][0] / 2 : vmInfo[vmType][0]);
         maxM = max(maxM, vmInfo[vmType][2] ? vmInfo[vmType][1] / 2 : vmInfo[vmType][1]);
 
-        // needList[vmID] = {vmInfo[vmType][0], vmInfo[vmType][1]};
-        // dayNeedCpu += needList[vmID][0];
-        // dayNeedMem += needList[vmID][1];
-        // maxC = max(maxC, needList[vmID][0]);
-        // maxM = max(maxM, needList[vmID][1]);
-
-        dayNeedCpu += vmInfo[vmType][0];
-        dayNeedMem += vmInfo[vmType][1];
+        needList[vmID] = {vmInfo[vmType][0], vmInfo[vmType][1]};
+        dayNeedCpu += needList[vmID][0];
+        dayNeedMem += needList[vmID][1];
     }
     else
     {
@@ -587,12 +582,10 @@ void readRequest()
         while ((c = getchar()) != ')')
             vmID += c;
 
-        // dayNeedCpu -= needList[vmID][0];
-        // dayNeedMem -= needList[vmID][1];
-        dayNeedCpu -= vmInfo[existVM[vmID].vmType][0];
-        dayNeedMem -= vmInfo[existVM[vmID].vmType][1];
+        dayNeedCpu -= needList[vmID][0];
+        dayNeedMem -= needList[vmID][1];
 
-        // needList.erase(vmID);
+        needList.erase(vmID);
     }
     getchar();
     dayRequests.emplace_back(isAdd, vmID, vmType);
