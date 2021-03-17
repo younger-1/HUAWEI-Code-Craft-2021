@@ -435,6 +435,7 @@ Description:
 // Pair of <serverType, ServerRatio>
 vector<pair<string, ServerRatio>> uniformedServers;
 
+// 存储单价归一化后的服务器 CPU 和 Memory
 void initUniformedServers()
 {
     // todo: priority_queue<pair<string, vector<double>>> a;
@@ -564,20 +565,19 @@ void readRequest()
         getchar();
         while ((c = getchar()) != ')')
             vmID += c;
-        // needList[vmID] = {vmInfo[vmType][0], vmInfo[vmType][1]};
-        // dayNeedCpu += needList[vmID][0];
-        // dayNeedMem += needList[vmID][1];
-        // allNeedCpu += needList[vmID][0];
-        // allNeedMem += needList[vmID][1];
-        // maxC = max(maxC, needList[vmID][0]);
-        // maxM = max(maxM, needList[vmID][1]);
-
-        allNeedCpu += vmInfo[vmType][0];
-        allNeedMem += vmInfo[vmType][1];
 
         // 虚拟机在单个节点占用的最大资源
         maxC = max(maxC, vmInfo[vmType][2] ? vmInfo[vmType][0] / 2 : vmInfo[vmType][0]);
         maxM = max(maxM, vmInfo[vmType][2] ? vmInfo[vmType][1] / 2 : vmInfo[vmType][1]);
+
+        // needList[vmID] = {vmInfo[vmType][0], vmInfo[vmType][1]};
+        // dayNeedCpu += needList[vmID][0];
+        // dayNeedMem += needList[vmID][1];
+        // maxC = max(maxC, needList[vmID][0]);
+        // maxM = max(maxM, needList[vmID][1]);
+
+        dayNeedCpu += vmInfo[vmType][0];
+        dayNeedMem += vmInfo[vmType][1];
     }
     else
     {
@@ -589,11 +589,10 @@ void readRequest()
 
         // dayNeedCpu -= needList[vmID][0];
         // dayNeedMem -= needList[vmID][1];
+        dayNeedCpu -= vmInfo[existVM[vmID].vmType][0];
+        dayNeedMem -= vmInfo[existVM[vmID].vmType][1];
 
-        allNeedCpu -= needList[vmID][0];
-        allNeedMem -= needList[vmID][1];
-
-        needList.erase(vmID);
+        // needList.erase(vmID);
     }
     getchar();
     dayRequests.emplace_back(isAdd, vmID, vmType);
@@ -720,51 +719,55 @@ void processIO()
         readVMInfo();
     }
 
+    // 共 n 天
     n = readSingleNum();
     for (int i = 0; i < n; ++i)
     {
+        // 第 n 天共 m 个请求
         m = readSingleNum();
 
         // 重置需求队列
-        // dayNeedCpu = 0;
-        // dayNeedMem = 0;
-        // maxC = 0;
-        // maxM = 0;
+        dayNeedCpu = 0;
+        dayNeedMem = 0;
+        maxC = 0;
+        maxM = 0;
 
         for (int j = 0; j < m; ++j)
         {
             readRequest();
         }
-        // float dayNeed_CM_Ratio = dayNeedCpu * 1.0 / dayNeedMem;
-        // readyServer = bestServers(dayNeed_CM_Ratio, maxC, maxM);
+        float dayNeed_CM_Ratio = dayNeedCpu * 1.0 / dayNeedMem;
+        readyServer = bestServers(dayNeed_CM_Ratio, maxC, maxM);
 
-        // applyServer();
+        // for (auto r : readyServer)
+        // {
+        //     cout << readyServer.size() << ": " << r << endl;
+        // }
 
-        // serverCensus();
-        // moveCensus();
-        // infoOut();
+        applyServer();
 
-        // #ifdef TEST
-        //         priceSum += dayCostSum;
-        // #endif // TEST
+        serverCensus();
+        moveCensus();
+        infoOut();
+
+#ifdef TEST
+        priceSum += dayCostSum;
+#endif // TEST
 
         // ? move()
-        allRequests.push_back(dayRequests);
+        // allRequests.push_back(dayRequests);
         dayRequests.clear();
     }
 
-    float all_CM_Ratio = allNeedCpu * 1.0 / allNeedMem;
-    readyServer = bestServers(all_CM_Ratio, maxC, maxM);
-
-    allApplyServer();
-
-    serverCensus();
-    moveCensus();
-    infoOut();
-
-    // #ifdef TEST
-    //         priceSum += dayCostSum;
-    // #endif // TEST
+    // float all_CM_Ratio = allNeedCpu * 1.0 / allNeedMem;
+    // readyServer = bestServers(all_CM_Ratio, maxC, maxM);
+    // allApplyServer();
+    // for (int i = 0; i < n; i++)
+    // {
+    //     serverCensus();
+    //     moveCensus();
+    //     infoOut();
+    // }
 
 #ifdef TEST
     cout << priceSum << endl;
