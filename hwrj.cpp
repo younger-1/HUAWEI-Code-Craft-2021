@@ -267,8 +267,8 @@ bool redistribution(Request &r)
     }
 
     // 如果是添加操作
-    // 如果双端
     const vector<int> &vm = vmInfo[r.vmType];
+    // 如果双端
     if (vm[2])
     {
         int c = vm[0] / 2, m = vm[1] / 2;
@@ -468,37 +468,81 @@ vector<string> bestServers(float CM_Ratio, int maxCpu, int maxMemory)
     int totalServer = uniformedServers.size();
     int returnSize = totalServer > 50 ? (totalServer / 10) : totalServer < 5 ? totalServer : 5;
 
+    bool isStartIterChanged = false;
+    bool isEndIterChanged = false;
     int searchScale = 3;
     if (findIter == uniformedServers.begin() && searchScale * returnSize < totalServer)
     {
         endIter = uniformedServers.begin() + searchScale * returnSize;
+        isEndIterChanged = true;
     }
     else if (findIter == uniformedServers.end() && searchScale * returnSize < totalServer)
     {
         startIter = uniformedServers.end() - searchScale * returnSize;
+        isStartIterChanged = true;
     }
     else
     {
         if (findIter - uniformedServers.begin() > returnSize)
+        {
             startIter = findIter - returnSize;
+            isStartIterChanged = true;
+        }
         if (uniformedServers.end() - findIter > returnSize)
+        {
             endIter = findIter + returnSize;
-    }
-
-    for (auto it = startIter; it != endIter; ++it)
-    {
-        it->second.projection = (it->second.uMemory * 1 + it->second.uCpu * CM_Ratio) / sqrt(1 + CM_Ratio * CM_Ratio);
+            isEndIterChanged = true;
+        }
     }
 
     vector<size_t> bestServersIndex;
     bestServersIndex.reserve(distance(startIter, endIter));
 
-    for (auto it = startIter; it != endIter; ++it)
+    int k = 0;
+    while (bestServersIndex.size() == 0)
     {
-        if (serverInfo[it->first][0] < (maxCpu << 1) || serverInfo[it->first][1] < (maxMemory << 1))
-            continue;
-        bestServersIndex.push_back(it - uniformedServers.begin());
+        if (k != 0)
+        {
+            if (startIter != uniformedServers.begin())
+            {
+                if ((isStartIterChanged && !isEndIterChanged) || (k % 2 == 0 && isStartIterChanged && isEndIterChanged))
+                {
+                    endIter = startIter;
+                    startIter -= 1;
+                }
+            }
+            if (endIter != uniformedServers.end())
+            {
+                if ((!isStartIterChanged && isEndIterChanged) || (k % 2 == 0 && isStartIterChanged && isEndIterChanged))
+                {
+                    startIter = endIter;
+                    endIter += 1;
+                }
+            }
+        }
+
+        for (auto it = startIter; it != endIter; ++it)
+        {
+            if (serverInfo[it->first][0] < (maxCpu << 1) || serverInfo[it->first][1] < (maxMemory << 1))
+                continue;
+            bestServersIndex.push_back(it - uniformedServers.begin());
+            it->second.projection =
+                (it->second.uMemory * 1 + it->second.uCpu * CM_Ratio) / sqrt(1 + CM_Ratio * CM_Ratio);
+        }
+        k += 1;
     }
+
+#ifdef TEST
+    if (bestServersIndex.size() == 0)
+    {
+        cout << endl;
+        cout << uniformedServers.size() << endl;
+        cout << findIter - uniformedServers.begin() << endl;
+        cout << "  [" << startIter - uniformedServers.begin() << ',' << endIter - uniformedServers.begin() << ')'
+             << endl;
+    }
+#endif // TEST
+
     sort(bestServersIndex.begin(), bestServersIndex.end(),
          [&](int a, int b) { return uniformedServers[a].second.projection > uniformedServers[b].second.projection; });
 
@@ -508,6 +552,7 @@ vector<string> bestServers(float CM_Ratio, int maxCpu, int maxMemory)
     {
         bestServers.push_back(uniformedServers[i].first);
     }
+
     return bestServers;
 }
 
@@ -694,7 +739,7 @@ Description:
 void processIO()
 {
 #ifdef TEST
-    string inputFile = "training-data/training-2.txt";
+    string inputFile = "training-data/training-1.txt";
     string outputFile = "output.txt";
     freopen(inputFile.c_str(), "rb", stdin);
     freopen(outputFile.c_str(), "wb", stdout);
@@ -732,11 +777,16 @@ void processIO()
         }
         float dayNeed_CM_Ratio = dayNeedCpu * 1.0 / dayNeedMem;
         readyServer = bestServers(dayNeed_CM_Ratio, maxC, maxM);
-
-        // for (auto r : readyServer)
-        // {
-        //     cout << readyServer.size() << ": " << r << endl;
-        // }
+        if (i == 479 or i == 201)
+        {
+            cout << dayNeedCpu << endl;
+            cout << dayNeedMem << endl;
+            cout << readyServer.size() << ": " << endl;
+            for (auto r : readyServer)
+            {
+                cout << readyServer.size() << ": " << r << endl;
+            }
+        }
 
         applyServer();
 
