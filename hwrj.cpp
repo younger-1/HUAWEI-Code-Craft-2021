@@ -740,7 +740,7 @@ void processIO()
 {
 #ifdef TEST
     string inputFile = "training-data/training-1.txt";
-    string outputFile = "output.txt";
+    string outputFile = "training-data/output.txt";
     freopen(inputFile.c_str(), "rb", stdin);
     freopen(outputFile.c_str(), "wb", stdout);
 #endif // TEST
@@ -777,16 +777,6 @@ void processIO()
         }
         float dayNeed_CM_Ratio = dayNeedCpu * 1.0 / dayNeedMem;
         readyServer = bestServers(dayNeed_CM_Ratio, maxC, maxM);
-        if (i == 479 or i == 201)
-        {
-            cout << dayNeedCpu << endl;
-            cout << dayNeedMem << endl;
-            cout << readyServer.size() << ": " << endl;
-            for (auto r : readyServer)
-            {
-                cout << readyServer.size() << ": " << r << endl;
-            }
-        }
 
         applyServer();
 

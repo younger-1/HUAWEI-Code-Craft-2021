@@ -4,10 +4,8 @@
 
 *.exe
 
-test.cc
-test.sh
-test.txt
+/test
 
-/output.txt
+output*.txt
 
 /.vscode/
