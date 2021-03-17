@@ -1,389 +1,774 @@
-// https://paste.ubuntu.com/p/jx4PjcK7fN/
-
-#include <assert.h>
-#include <time.h>
-
 #include <algorithm>
+#include <cmath>
+#include <fstream>
 #include <iostream>
-#include <string>
+#include <iterator>
+#include <queue>
+#include <stdio.h>
+#include <time.h>
 #include <unordered_map>
 #include <vector>
+//#include<bits/stdc++.h>
 
 using namespace std;
 
 // #define TEST
 
-// 服务器信息
-unordered_map<string, vector<int>> serverInfos;
-// 虚拟机信息
-unordered_map<string, vector<int>> vmInfos;
-// 请求信息
-vector<vector<string>> requestInfos;
+/*************************************************
+Name: Structure
+Description:
+**************************************************/
 
-// 购买的服务器信息
-int serverNumber = 0;
-unordered_map<int, vector<int>> sysServerResource;
-// unordered_map<int,vector<string>> serverRunVms;
-
-// 当前开机服务器
-vector<int> serverRunVms;
-// 记录虚拟机运行在那个服务器上
-unordered_map<string, vector<int>> vmOnServer;
-
-//#ifdef TEST
-//    const string filePath = "../training-data/training-1.txt";
-//#endif
-const string filePath = "../training-data/training-2.txt";
-// 成本
-long long SERVERCOST = 0, POWERCOST = 0, TOTALCOST = 0;
-
-// unordered_map<int,vector<string>> requestAddInfos;
-// vector<int> requestDelInfos;
-
-void generateServer(string &serverType, string &cpuCores, string &memorySize, string &serverCost, string &powerCost)
+// 存在的服务器信息
+struct ExistServer
 {
-    string _serverType = "";
-    for (int i = 1; i < serverType.size() - 1; i++)
-    {
-        _serverType += serverType[i];
-    }
-    int _cpuCores = 0, _memorySize = 0, _serverCost = 0, _powerCost = 0;
+    int remainCpuA, remainCpuB, remainMemA, remainMemB;
+    float CM_Ratio_A, CM_Ratio_B;
+    string serverType;
+};
 
-    for (int i = 0; i < cpuCores.size() - 1; i++)
+// 存在的虚拟机信息
+struct ExistVM
+{
+    string vmType;
+    int serverIndex;
+    bool inA;
+};
+
+// eg. (add, c3.large.4, 5), (del, 2)
+struct Request
+{
+    bool isAdd;
+    string vmID;
+    string vmType;
+    // char id[28];
+    // char name[32];
+    Request(bool _isAdd, string _id, string _type)
     {
-        _cpuCores = 10 * _cpuCores + cpuCores[i] - '0';
+        isAdd = _isAdd;
+        vmID = _id;
+        vmType = _type;
     }
-    for (int i = 0; i < memorySize.size() - 1; i++)
+};
+
+struct ServerRatio
+{
+    float uCpu;
+    float uMemory;
+    float ratio;
+    float projection;
+};
+
+/*************************************************
+Name: Global variables
+Description:
+**************************************************/
+
+#ifdef TEST
+int priceSum = 0, dayCostSum = 0;
+#endif // TEST
+
+// serverInfo[serverType] = {cpu, memory, price, dayCost};
+// eg. (NV603, 8, 32, 53800, 500)
+unordered_map<string, vector<int>> serverInfo;
+
+// vmInfo[vmType] = {cpu, memory, isTwoNode};
+// eg. (c3.large.4, 4, 16, 0)
+unordered_map<string, vector<int>> vmInfo;
+
+// vmID => ExistVM
+unordered_map<string, ExistVM> existVM;
+
+// serverIndex => ExistServer
+unordered_map<int, ExistServer> existServer;
+
+// 当前队列待选服务器型号（必须包含容量大于任意请求的服务器大小）
+vector<string> readyServer = {"NV603"};
+
+// 当次队列购买的服务器
+unordered_map<string, int> serverApplyNumber;
+
+// 当次队列购买的服务器总数
+int curServerCnt = 0;
+
+// 服务器总数
+int serverCnt = 0;
+
+// 当前最匹配服务器
+string curNeedServer;
+
+// 当次队列申请的虚拟机与服务器与迁移输出信息
+vector<string> vmApplyInfo, serverapplyInfo, moveInfo;
+
+// 统计虚拟机的CPU，MEMORY需求, eg.要删除的虚拟机是当天创建的
+// vmID => {CPU, MEM}
+unordered_map<string, vector<int>> needList;
+
+vector<Request> dayRequests;
+
+vector<vector<Request>> allRequests;
+
+/*************************************************
+Name: Unused variables
+Description:
+**************************************************/
+
+// 上两日操作消息
+vector<string> infoLog;
+
+/*************************************************
+Name: Utils functions
+Description:
+**************************************************/
+
+const char digit[11] = "0123456789";
+string int2str(int num)
+{
+    if (num == 0)
+        return "0";
+    string ret = "";
+    while (num)
     {
-        _memorySize = 10 * _memorySize + memorySize[i] - '0';
+        ret += digit[num % 10];
+        num /= 10;
     }
-    for (int i = 0; i < serverCost.size() - 1; i++)
-    {
-        _serverCost = 10 * _serverCost + serverCost[i] - '0';
-    }
-    for (int i = 0; i < powerCost.size() - 1; i++)
-    {
-        _powerCost = 10 * _powerCost + powerCost[i] - '0';
-    }
-    serverInfos[_serverType] =
-        vector<int>{_cpuCores / 2, _cpuCores / 2, _memorySize / 2, _memorySize / 2, _serverCost, _powerCost};
+    reverse(ret.begin(), ret.end());
+    return ret;
 }
 
-void generateVm(string &vmType, string &vmCpuCores, string &vmMemory, string &vmTwoNodes)
+// 生成分配信息
+void returnInfo(int index, char kind = 'D')
 {
-    string _vmType = "";
-
-    for (int i = 1; i < vmType.size() - 1; i++)
+    string vmaly = "";
+    if (kind == 'A')
     {
-        _vmType += vmType[i];
+        vmaly += "(";
+        vmaly += int2str(index);
+        vmaly += ", ";
+        vmaly += "A)";
+        vmApplyInfo.emplace_back(vmaly);
     }
-
-    int _vmCpuCores = 0, _vmMemory = 0, _vmTwoNodes = 0;
-    for (int i = 0; i < vmCpuCores.size() - 1; i++)
+    else if (kind == 'B')
     {
-        _vmCpuCores = _vmCpuCores * 10 + vmCpuCores[i] - '0';
-    }
-    for (int i = 0; i < vmMemory.size() - 1; i++)
-    {
-        _vmMemory = _vmMemory * 10 + vmMemory[i] - '0';
-    }
-    if (vmTwoNodes[0] == '1')
-    {
-        _vmTwoNodes = 1;
+        vmaly += "(";
+        vmaly += int2str(index);
+        vmaly += ", ";
+        vmaly += "B)";
+        vmApplyInfo.emplace_back(vmaly);
     }
     else
     {
-        _vmTwoNodes = 0;
+        vmaly += "(";
+        vmaly += int2str(index);
+        vmaly += ")";
+        vmApplyInfo.emplace_back(vmaly);
     }
-    vmInfos[_vmType] = vector<int>{_vmCpuCores, _vmMemory, _vmTwoNodes};
-}
-// 解析用户添加请求
-void generateRequest(string &op, string &reqVmType, string &reqId)
-{
-    string _op, _reqVmType, _reqId;
-    _op = op.substr(1, op.size() - 1);
-    _reqVmType = reqVmType.substr(0, reqVmType.size() - 1);
-    _reqId = reqId.substr(0, reqId.size() - 1);
-    requestInfos.push_back(vector<string>{_op, _reqVmType, _reqId});
 }
 
-// 解析用户删除请求
-void generateRequest(string &op, string &reqId)
-{
-    //    int _reqId = 0;
-    //    for(int i=0;i<reqId.size() - 1;i++){
-    //        _reqId =_reqId*10 + reqId[i] - '0';
-    //    }
-    string _op, _reqId;
-    _reqId = reqId.substr(0, reqId.size() - 1);
-    _op = op.substr(1, op.size() - 1);
-    requestInfos.push_back(vector<string>{_op, _reqId});
-    //    requestDelInfos.push_back(_reqId);
+/*************************************************
+Name: Core algorithms
+Description: Scheduling and optimization
+**************************************************/
 
-    //    cout<<_op<<" "<<_reqId<<endl;
-    //    for(int i=0;i<reqVmType.size();i++){
-    //        _reqVmType =reqVmType[i];
-    //    }
-}
-
-// 尝试在服务器上分配虚拟机资源
-bool choseServer(vector<int> &server, vector<int> &vm, int serverId, string vmId)
+// 指定服务器分配
+bool addNewServer(string &_vmType, string &_vmID, int _index)
 {
-    int vmCores = vm[0], vmMemory = vm[1], vmTwoNodes = vm[2];
-    int &serverCoreA = server[0], &serverCoreB = server[1], &serverMemoryA = server[2], &serverMemoryB = server[3];
-    if (vmTwoNodes)
+    vector<int> &vm = vmInfo[_vmType];
+    ExistServer &es = existServer[_index];
+    if (vm[2])
     {
-        int needCores = vmCores / 2, needMemory = vmMemory / 2;
-        if (serverCoreA >= needCores && serverCoreB >= needCores && serverMemoryA >= needMemory &&
-            serverMemoryB >= needMemory)
+        int c = vm[0] / 2, m = vm[1] / 2;
+        if (es.remainCpuA >= c && es.remainCpuB >= c && es.remainMemA >= m && es.remainMemB >= m)
         {
-            serverCoreA -= needCores;
-            serverCoreB -= needCores;
-            serverMemoryA -= needMemory;
-            serverMemoryB -= needMemory;
-            vmOnServer[vmId] = vector<int>{serverId, 1, 2};
-            cout << "(" << serverId << ")\n";
+            // 更新服务器信息
+            es.remainCpuA -= c;
+            es.remainCpuB -= c;
+            es.remainMemA -= m;
+            es.remainMemB -= m;
+            es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
+            es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
+
+            // 创建虚拟机信息
+            existVM[_vmID].vmType = _vmType;
+            existVM[_vmID].serverIndex = _index;
+
+            // 申请虚拟机信息存储
+            returnInfo(_index);
+
             return true;
         }
-        else
-        {
-            return false;
-        }
     }
-    else if (serverCoreA >= vmCores && serverMemoryA >= vmMemory)
+    // 单端分配情况，优化点
+    //????????????????????????
+    //????????????????????????
+    else if (es.remainCpuA >= vm[0] && es.remainMemA >= vm[1])
     {
-        serverCoreA -= vmCores;
-        serverMemoryA -= vmMemory;
-        vmOnServer[vmId] = vector<int>{serverId, 1};
-        cout << "(" << serverId << ", A)\n";
-        return true;
-    }
-    else if (serverCoreB >= vmCores && serverMemoryB >= vmMemory)
-    {
-        serverCoreB -= vmCores;
-        serverMemoryB -= vmMemory;
-        vmOnServer[vmId] = vector<int>{serverId, 2};
-        cout << "(" << serverId << ", B)\n";
-        return true;
-    }
+        // 后续希望建立红黑树，按CM_Ratio参数选择合适的服务器分配
+        es.remainCpuA -= vm[0];
+        es.remainMemA -= vm[1];
+        es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
 
+        existVM[_vmID].vmType = _vmType;
+        existVM[_vmID].inA = 1;
+        existVM[_vmID].serverIndex = _index;
+
+        returnInfo(_index, 'A');
+
+        return true;
+    }
     return false;
 }
 
-// 处理创建虚拟机操作
-int createVM(vector<string> &createVmInfo)
+// 在已有服务器上分配或删除
+bool redistribution(Request &r)
 {
-    string _reqVmType = createVmInfo[1], _reqId = createVmInfo[2];
-    vector<int> vm = vmInfos[_reqVmType];
-    int success = -1;
-    for (int i = 0; i < serverNumber; i++)
+    // 如果是删除操作
+    if (!r.isAdd)
     {
-        auto &server = sysServerResource[i];
-        if (choseServer(server, vm, i, _reqId))
+        // 存在的虚拟机信息
+        ExistVM &ev = existVM[r.vmID];
+        // 存在的服务器
+        ExistServer &es = existServer[ev.serverIndex];
+        // 存在的虚拟机格式
+        const vector<int> &vm = vmInfo[ev.vmType];
+
+        if (vm[2])
         {
-            //            serverRunVms[i].push_back(_reqId);
-            serverRunVms[i]++;
-            success = 1;
-            break;
+            // 更新服务器信息
+            es.remainCpuA += vm[0] / 2;
+            es.remainCpuB += vm[0] / 2;
+            es.remainMemA += vm[1] / 2;
+            es.remainMemB += vm[1] / 2;
+            es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
+            es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
         }
-        assert(server[0] >= 0 && server[1] >= 0 && server[2] >= 0 && server[3] >= 0);
+        else if (ev.inA)
+        {
+            es.remainCpuA += vm[0];
+            es.remainMemA += vm[1];
+            es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
+        }
+        else
+        {
+            es.remainCpuB += vm[0];
+            es.remainMemB += vm[1];
+            es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
+        }
+
+// 统计日均损耗
+#ifdef TEST
+        if (serverInfo[es.serverType][0] == es.remainCpuA + es.remainCpuB)
+            dayCostSum -= serverInfo[es.serverType][3];
+#endif // TEST
+
+        // 删除虚拟机信息
+        existVM.erase(r.vmID);
+        return true;
     }
-    return success;
+
+    // 如果是添加操作
+    // 如果双端
+    const vector<int> &vm = vmInfo[r.vmType];
+    int c = vm[0] / 2, m = vm[1] / 2;
+    if (vm[2])
+    {
+        for (int i = 0; i < serverCnt; ++i)
+        {
+            ExistServer &es = existServer[i];
+            if (es.remainCpuA >= c && es.remainCpuB >= c && es.remainMemA >= m && es.remainMemB >= m)
+            {
+
+// 统计日均损耗
+#ifdef TEST
+                // todo: ?
+                if (serverInfo[es.serverType][0] == es.remainCpuA + es.remainCpuB)
+                    dayCostSum += serverInfo[es.serverType][3];
+#endif // TEST
+
+                // 更新服务器信息
+                es.remainCpuA -= c;
+                es.remainCpuB -= c;
+                es.remainMemA -= m;
+                es.remainMemB -= m;
+                es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
+                es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
+
+                // 创建虚拟机信息
+                existVM[r.vmID].vmType = r.vmType;
+                existVM[r.vmID].serverIndex = i;
+
+                // 申请虚拟机信息存储
+                returnInfo(i);
+                return true;
+            }
+        }
+    }
+    // 单端分配情况，优化点
+    //????????????????????????
+    //????????????????????????
+    else
+    {
+        // 后续希望建立红黑树，按CM_Ratio参数选择合适的服务器分配
+        for (int i = 0; i < serverCnt; ++i)
+        {
+            ExistServer &es = existServer[i];
+            if (es.remainCpuA >= c && es.remainMemA >= m)
+            {
+
+// 统计日均损耗
+#ifdef TEST
+                if (serverInfo[es.serverType][0] == es.remainCpuA + es.remainCpuB)
+                    dayCostSum += serverInfo[es.serverType][3];
+#endif // TEST
+
+                es.remainCpuA -= c;
+                es.remainMemA -= m;
+                es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
+
+                existVM[r.vmID].vmType = r.vmType;
+                existVM[r.vmID].inA = 1;
+                existVM[r.vmID].serverIndex = i;
+
+                returnInfo(i, 'A');
+                return true;
+            }
+            else if (es.remainCpuB >= c && es.remainMemB >= m)
+            {
+// 统计日均损耗
+#ifdef TEST
+                if (serverInfo[es.serverType][0] == es.remainCpuA + es.remainCpuB)
+                    dayCostSum += serverInfo[es.serverType][3];
+#endif // TEST
+
+                es.remainCpuB -= c;
+                es.remainMemB -= m;
+                es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
+
+                existVM[r.vmID].vmType = r.vmType;
+                existVM[r.vmID].inA = 0;
+                existVM[r.vmID].serverIndex = i;
+
+                returnInfo(i, 'B');
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
-// 处理删除虚拟机操作
-void delVM(vector<string> &delVmInfo)
+// 每个请求队列分配服务器
+void applyServer()
 {
-    string _vmId = delVmInfo[1];
-    auto _vmInfo = vmOnServer[_vmId];
-    vector<int> _serverInfo = vmOnServer[_vmId];
-    int _serverId = _serverInfo[0];
-
-    //    auto iter = std::find(std::begin(serverRunVms[_serverId]),
-    //    std::end(serverRunVms[_serverId]), _vmId);
-    //    serverRunVms[_serverId].erase(iter);
-    serverRunVms[_serverId]--;
-
-    vector<int> &server = sysServerResource[_serverId];
-    if (_serverInfo.size() == 3)
+    int choseServer = 0;
+    string curNeedServer;
+    for (int i = 0; i < dayRequests.size(); ++i)
     {
-        int cores = _vmInfo[0] / 2, memory = _vmInfo[1] / 2;
-        server[0] += cores;
-        server[1] += cores;
-        server[2] += memory;
-        server[3] += memory;
+        // 如果存在的服务器分配未成功，则再分配
+        if (!redistribution(dayRequests[i]))
+        {
+            do
+            {
+                curNeedServer = readyServer[choseServer];
+                int c = serverInfo[curNeedServer][0] / 2, m = serverInfo[curNeedServer][1] / 2;
+                float cm = c * 1.0 / m;
+                existServer[serverCnt].serverType = curNeedServer;
+                existServer[serverCnt].remainCpuA = c;
+                existServer[serverCnt].remainCpuB = c;
+                existServer[serverCnt].remainMemA = m;
+                existServer[serverCnt].remainMemB = m;
+                existServer[serverCnt].CM_Ratio_A = cm;
+                existServer[serverCnt].CM_Ratio_B = cm;
+                choseServer++;
+            } while (!addNewServer(dayRequests[i].vmType, dayRequests[i].vmID, serverCnt));
+
+            serverApplyNumber[curNeedServer]++;
+            curServerCnt++;
+
+#ifdef TEST
+            dayCostSum += serverInfo[curNeedServer][3];
+            priceSum += serverInfo[curNeedServer][2];
+#endif // TEST
+
+            choseServer = 0;
+            serverCnt++;
+        }
+    }
+}
+
+void allApplyServer()
+{
+    string serverType = readyServer[0];
+    int serverIndex = 0, _cpu = 0, _mem = 0;
+    float _CM = 0.0;
+    for (int i = 0; i < allRequests.size(); i++)
+    {
+        auto &_dayRequests = allRequests[i];
+        for (int j = 0; j < _dayRequests.size(); j++)
+        {
+            if (!redistribution(_dayRequests[j]))
+            {
+                _cpu = serverInfo[serverType][0] / 2, _mem = serverInfo[serverType][1] / 2;
+                _CM = _cpu * 1.0 / _mem;
+                existServer[serverIndex].serverType = serverType;
+                existServer[serverIndex].remainCpuA = _cpu;
+                existServer[serverIndex].remainCpuB = _cpu;
+                existServer[serverIndex].remainMemA = _mem;
+                existServer[serverIndex].remainMemB = _mem;
+                existServer[serverIndex].CM_Ratio_A = _CM;
+                existServer[serverIndex].CM_Ratio_B = _CM;
+
+                addNewServer(_dayRequests[j].vmType, _dayRequests[j].vmID, serverIndex);
+
+                serverApplyNumber[serverType]++;
+                serverIndex += 1;
+                serverCnt += 1;
+            }
+        }
+    }
+}
+
+/*************************************************
+Name: Pick server
+Description:
+**************************************************/
+
+// Pair of <serverType, ServerRatio>
+vector<pair<string, ServerRatio>> uniformedServers;
+
+// 存储单价归一化后的服务器 CPU 和 Memory
+void initUniformedServers()
+{
+    // todo: priority_queue<pair<string, vector<double>>> a;
+    for (auto server : serverInfo)
+    {
+        float uCpu = 1.0 * server.second[0] / server.second[2] * 1000;
+        float uMemory = 1.0 * server.second[1] / server.second[2] * 1000;
+        ServerRatio tmp = {uCpu, uMemory, uCpu / uMemory, 0};
+        // ? move
+        uniformedServers.emplace_back(server.first, move(tmp));
+    }
+    // 按 ratio 从小到大
+    sort(uniformedServers.begin(), uniformedServers.end(),
+         [](pair<string, ServerRatio> &a, pair<string, ServerRatio> &b) { return a.second.ratio < b.second.ratio; });
+}
+
+// 找到最优服务器列表
+// todo: dayLoss
+vector<string> bestServers(float CM_Ratio, int maxCpu, int maxMemory)
+{
+    // usage: lower_bound(beg, end, val, comp)
+    auto findIter =
+        lower_bound(uniformedServers.begin(), uniformedServers.end(), CM_Ratio,
+                    [](pair<string, ServerRatio> &server, float CM_R) { return server.second.ratio < CM_R; });
+
+    decltype(findIter) startIter = uniformedServers.begin();
+    decltype(findIter) endIter = uniformedServers.end();
+
+    int totalServer = uniformedServers.size();
+    int returnSize = totalServer > 50 ? (totalServer / 10) : totalServer < 5 ? totalServer : 5;
+
+    int searchScale = 3;
+    if (findIter == uniformedServers.begin() && searchScale * returnSize < totalServer)
+    {
+        endIter = uniformedServers.begin() + searchScale * returnSize;
+    }
+    else if (findIter == uniformedServers.end() && searchScale * returnSize < totalServer)
+    {
+        startIter = uniformedServers.end() - searchScale * returnSize;
     }
     else
     {
-        int cores = _vmInfo[0], memory = _vmInfo[1];
-        if (_serverInfo[1] == 1)
-        {
-            server[0] += cores;
-            server[2] += memory;
-        }
-        else
-        {
-            server[1] += cores;
-            server[3] += memory;
-        }
+        if (findIter - uniformedServers.begin() > returnSize)
+            startIter = findIter - returnSize;
+        if (uniformedServers.end() - findIter > returnSize)
+            endIter = findIter + returnSize;
     }
-}
 
-// 初始化server，如何初始化购买的服务器是一个大的优化
-void bugServer()
-{
-    string serverType = "hostUY41I";
-    int n = 10000;
-    serverRunVms.resize(n, 0);
-    cout << "(purchase, " << 2 << ")\n";
-    string pauseInfo = "(" + serverType + ", ";
-    pauseInfo += std::to_string(n / 2) + ")";
-    cout << pauseInfo << endl;
-
-    for (int i = 0; i < n / 2; i++)
+    for (auto it = startIter; it != endIter; ++it)
     {
-        sysServerResource[serverNumber++] = serverInfos[serverType];
-        SERVERCOST += serverInfos[serverType][4];
+        it->second.projection = (it->second.uMemory * 1 + it->second.uCpu * CM_Ratio) / sqrt(1 + CM_Ratio * CM_Ratio);
     }
-    serverType = "host78BMY";
-    pauseInfo = "(" + serverType + ", ";
-    pauseInfo += std::to_string(serverNumber) + ")";
-    cout << pauseInfo << endl;
-    for (int i = 0; i < n / 2; i++)
+
+    vector<size_t> bestServersIndex;
+    bestServersIndex.reserve(distance(startIter, endIter));
+
+    for (auto it = startIter; it != endIter; ++it)
     {
-        sysServerResource[serverNumber++] = serverInfos[serverType];
-        SERVERCOST += serverInfos[serverType][4];
-    }
-}
-
-// 扩容服务器策略
-void expansion()
-{
-    cout << "(purchase, 0)\n";
-}
-
-// 迁移虚拟机策略
-void migrate()
-{
-    cout << "(migration, 0)\n";
-}
-
-// 分配策略
-void match(int day)
-{
-    if (day != 0)
-        expansion();
-    migrate();
-    //    printf("There are %d requests waiting to matching
-    //    !!\n",requestInfos.size());
-    for (auto req : requestInfos)
-    {
-        // 创建虚拟机 还是 删除虚拟机
-        int opType = req.size() == 3 ? 1 : 0;
-        if (opType)
-        {
-            //#ifdef TEST
-            //            cout<<"createing VMing !!"<<endl;
-            //#endif
-            if (createVM(req) == -1)
-            {
-#ifdef TEST
-                cout << "No enough Resource" << endl;
-#endif
-            };
-        }
-        else
-        {
+        if (serverInfo[it->first][0] < (maxCpu << 1) || serverInfo[it->first][1] < (maxMemory << 1))
             continue;
-            // 释放虚拟机后，资源不是立即释放
-            delVM(req);
-        }
+        bestServersIndex.push_back(it - uniformedServers.begin());
     }
+    sort(bestServersIndex.begin(), bestServersIndex.end(),
+         [&](int a, int b) { return uniformedServers[a].second.projection > uniformedServers[b].second.projection; });
+
+    vector<string> bestServers;
+    bestServers.reserve(bestServersIndex.size());
+    for (auto i : bestServersIndex)
+    {
+        bestServers.push_back(uniformedServers[i].first);
+    }
+    return bestServers;
 }
 
-void serverPower()
+/*************************************************
+Name: Input
+Description: Read stdin
+**************************************************/
+
+// 读取函数
+int readSingleNum()
 {
-    for (int i = 0; i < serverNumber; i++)
+    char c;
+    int ret = 0;
+    while ((c = getchar()) != '\n')
     {
-        //        if(serverRunVms[i].size() != 0){
-        if (serverRunVms[i] != 0)
-        {
-            POWERCOST += sysServerResource[i][5];
-        }
+        ret = (ret << 3) + (ret << 1) + c - '0';
     }
+    return ret;
+}
+
+int readNum()
+{
+    char c;
+    int ret = 0;
+    while ((c = getchar()) != ',')
+    {
+        ret = (ret << 3) + (ret << 1) + c - '0';
+    }
+    return ret;
+}
+
+int n, m;
+// 读入数据临时变量
+string serverType, vmType, vmID;
+// 读入存储临时变量
+int cpu, memory, price, loss, isTwoNode, isAdd;
+// 当前决策需要的CPU和Memory
+int dayNeedCpu = 0, dayNeedMem = 0, maxC = 0, maxM = 0;
+
+int allNeedCpu = 0, allNeedMem = 0;
+
+// 读取请求
+void readRequest()
+{
+    char c;
+    vmType = "";
+    vmID = "";
+    getchar();
+    if ((isAdd = (c = getchar()) == 'a'))
+    {
+        while ((c = getchar()) != ',')
+            ;
+        getchar();
+        while ((c = getchar()) != ',')
+            vmType += c;
+        getchar();
+        while ((c = getchar()) != ')')
+            vmID += c;
+
+        // 虚拟机在单个节点占用的最大资源
+        maxC = max(maxC, vmInfo[vmType][2] ? vmInfo[vmType][0] / 2 : vmInfo[vmType][0]);
+        maxM = max(maxM, vmInfo[vmType][2] ? vmInfo[vmType][1] / 2 : vmInfo[vmType][1]);
+
+        needList[vmID] = {vmInfo[vmType][0], vmInfo[vmType][1]};
+        dayNeedCpu += needList[vmID][0];
+        dayNeedMem += needList[vmID][1];
+    }
+    else
+    {
+        while ((c = getchar()) != ',')
+            ;
+        getchar();
+        while ((c = getchar()) != ')')
+            vmID += c;
+
+        dayNeedCpu -= needList[vmID][0];
+        dayNeedMem -= needList[vmID][1];
+
+        needList.erase(vmID);
+    }
+    getchar();
+    dayRequests.emplace_back(isAdd, vmID, vmType);
+}
+
+// 按行读取虚拟机信息
+void readVMInfo()
+{
+    char c;
+    vmType = "";
+    getchar();
+    while ((c = getchar()) != ',')
+        vmType += c;
+    getchar();
+    cpu = readNum();
+    getchar();
+    memory = readNum();
+    getchar();
+    isTwoNode = getchar() == '1';
+    getchar();
+    getchar();
+    vmInfo[vmType] = {cpu, memory, isTwoNode};
+}
+
+// 按行读取服务器信息
+void readServerInfo()
+{
+    char c;
+    serverType = "";
+    getchar();
+    while ((c = getchar()) != ',')
+        serverType += c;
+    getchar();
+    cpu = readNum();
+    getchar();
+    memory = readNum();
+    getchar();
+    price = readNum();
+    getchar();
+    loss = 0;
+    while ((c = getchar()) != ')')
+    {
+        loss = (loss << 3) + (loss << 1) + c - '0';
+    }
+    getchar();
+    serverInfo[serverType] = {cpu, memory, price, loss};
+}
+
+/*************************************************
+Name: Output
+Description: Write stdout
+**************************************************/
+
+// 生成服务器购买信息
+void rserverInfo(const string &name, int num)
+{
+    string rsi = "";
+    rsi += '(';
+    rsi += name;
+    rsi += ", ";
+    rsi += int2str(num);
+    rsi += ')';
+    serverapplyInfo.emplace_back(rsi);
+}
+
+// 统计输出的服务器信息
+void serverCensus()
+{
+    string sss = "purchase";
+    rserverInfo(sss, serverApplyNumber.size());
+    for (auto s : serverApplyNumber)
+    {
+        rserverInfo(s.first, s.second);
+    }
+    serverApplyNumber.clear();
+    curServerCnt = 0;
+}
+
+// 统计迁移信息
+void moveCensus()
+{
+    string ret = "(migration, 0)";
+    moveInfo.emplace_back(ret);
+}
+
+// 统一输出信息
+void infoOut()
+{
+    for (int i = 0; i < serverapplyInfo.size(); ++i)
+        cout << serverapplyInfo[i] << endl;
+    serverapplyInfo.clear();
+    for (int i = 0; i < moveInfo.size(); ++i)
+        cout << moveInfo[i] << endl;
+    moveInfo.clear();
+    for (int i = 0; i < vmApplyInfo.size(); ++i)
+        cout << vmApplyInfo[i] << endl;
+    vmApplyInfo.clear();
+}
+
+/*************************************************
+Name: Main process
+Description:
+**************************************************/
+
+void processIO()
+{
+#ifdef TEST
+    string inputFile = "training-data/training-2.txt";
+    string outputFile = "output.txt";
+    freopen(inputFile.c_str(), "rb", stdin);
+    freopen(outputFile.c_str(), "wb", stdout);
+#endif // TEST
+
+    n = readSingleNum();
+    for (int i = 0; i < n; ++i)
+    {
+        readServerInfo();
+    }
+    initUniformedServers();
+
+    n = readSingleNum();
+    for (int i = 0; i < n; ++i)
+    {
+        readVMInfo();
+    }
+
+    // 共 n 天
+    n = readSingleNum();
+    for (int i = 0; i < n; ++i)
+    {
+        // 第 n 天共 m 个请求
+        m = readSingleNum();
+
+        // 重置需求队列
+        dayNeedCpu = 0;
+        dayNeedMem = 0;
+        maxC = 0;
+        maxM = 0;
+
+        for (int j = 0; j < m; ++j)
+        {
+            readRequest();
+        }
+        float dayNeed_CM_Ratio = dayNeedCpu * 1.0 / dayNeedMem;
+        readyServer = bestServers(dayNeed_CM_Ratio, maxC, maxM);
+
+        // for (auto r : readyServer)
+        // {
+        //     cout << readyServer.size() << ": " << r << endl;
+        // }
+
+        applyServer();
+
+        serverCensus();
+        moveCensus();
+        infoOut();
+
+#ifdef TEST
+        priceSum += dayCostSum;
+#endif // TEST
+
+        // ? move()
+        // allRequests.push_back(dayRequests);
+        dayRequests.clear();
+    }
+
+    // float all_CM_Ratio = allNeedCpu * 1.0 / allNeedMem;
+    // readyServer = bestServers(all_CM_Ratio, maxC, maxM);
+    // allApplyServer();
+    // for (int i = 0; i < n; i++)
+    // {
+    //     serverCensus();
+    //     moveCensus();
+    //     infoOut();
+    // }
+
+#ifdef TEST
+    cout << priceSum << endl;
+#endif // TEST
 }
 
 int main()
 {
-    //    cin.tie(0);
-    //    ios::sync_with_stdio(0);
-    clock_t start, finish;
-    start = clock();
-    //#ifdef TEST
-    //    std::freopen(filePath.c_str(),"rb",stdin);
-    //#endif
-    // std::freopen(filePath.c_str(), "rb", stdin);
-    int serverNum;
-    string serverType, cpuCores, memorySize, serverCost, powerCost;
-    scanf("%d", &serverNum);
-
-    for (int i = 0; i < serverNum; i++)
-    {
-        cin >> serverType >> cpuCores >> memorySize >> serverCost >> powerCost;
-        generateServer(serverType, cpuCores, memorySize, serverCost, powerCost);
-    }
-
-    int vmNumber = 0;
-    scanf("%d", &vmNumber);
-
-    string vmType, vmCpuCores, vmMemory, vmTwoNodes;
-    for (int i = 0; i < vmNumber; i++)
-    {
-        cin >> vmType >> vmCpuCores >> vmMemory >> vmTwoNodes;
-        generateVm(vmType, vmCpuCores, vmMemory, vmTwoNodes);
-    }
-
-    int requestdays = 0, dayRequestNumber = 0;
-    scanf("%d", &requestdays);
-    string op, reqVmType, reqId;
-
-    // 开始处理请求
-    bugServer();
-    for (int day = 0; day < requestdays; day++)
-    {
-        scanf("%d", &dayRequestNumber);
-        requestInfos.clear();
-        for (int i = 0; i < dayRequestNumber; i++)
-        {
-            cin >> op;
-            if (op[1] == 'a')
-            {
-                cin >> reqVmType >> reqId;
-                generateRequest(op, reqVmType, reqId);
-            }
-            else
-            {
-                cin >> reqId;
-                generateRequest(op, reqId);
-            }
-        }
-#ifdef TEST
-        if (day == 0 || (day + 1) % 100 == 0)
-        {
-            printf("The %d day begin matching!!!\n", day + 1);
-        }
-#endif
-        match(day);
-        serverPower();
-        //        break;
-    }
-
-    fclose(stdin);
-    finish = clock();
-    TOTALCOST = SERVERCOST + POWERCOST;
-#ifdef TEST
-    printf("\nusr time: %f s \n", double(finish - start) / CLOCKS_PER_SEC);
-    printf("server cost: %lld \npower cost: %lld \ntotal cost: %lld \n", SERVERCOST, POWERCOST, TOTALCOST);
-#endif
+    processIO();
     return 0;
 }

@@ -269,9 +269,9 @@ bool redistribution(Request &r)
     // 如果是添加操作
     // 如果双端
     const vector<int> &vm = vmInfo[r.vmType];
-    int c = vm[0] / 2, m = vm[1] / 2;
     if (vm[2])
     {
+        int c = vm[0] / 2, m = vm[1] / 2;
         for (int i = 0; i < serverCnt; ++i)
         {
             ExistServer &es = existServer[i];
@@ -308,6 +308,7 @@ bool redistribution(Request &r)
     //????????????????????????
     else
     {
+        int c = vm[0], m = vm[1];
         // 后续希望建立红黑树，按CM_Ratio参数选择合适的服务器分配
         for (int i = 0; i < serverCnt; ++i)
         {
@@ -693,7 +694,7 @@ Description:
 void processIO()
 {
 #ifdef TEST
-    string inputFile = "training.txt";
+    string inputFile = "training-data/training-2.txt";
     string outputFile = "output.txt";
     freopen(inputFile.c_str(), "rb", stdin);
     freopen(outputFile.c_str(), "wb", stdout);
