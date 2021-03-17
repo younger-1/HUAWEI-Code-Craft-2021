@@ -32,9 +32,10 @@ struct ExistVM
 {
     string vmType;
     int serverIndex;
-    bool isTwoNode;
+    bool inA;
 };
 
+// eg. (add, c3.large.4, 5), (del, 2)
 struct Request
 {
     bool isAdd;
@@ -71,7 +72,7 @@ int priceSum = 0, dayCostSum = 0;
 // eg. (NV603, 8, 32, 53800, 500)
 unordered_map<string, vector<int>> serverInfo;
 
-// vmInfo[name] = {cpu, memory, isTwoNode};
+// vmInfo[vmType] = {cpu, memory, isTwoNode};
 // eg. (c3.large.4, 4, 16, 0)
 unordered_map<string, vector<int>> vmInfo;
 
@@ -179,6 +180,7 @@ bool addNewServer(string &_vmType, string &_vmID, int _index)
         int c = vm[0] / 2, m = vm[1] / 2;
         if (es.remainCpuA >= c && es.remainCpuB >= c && es.remainMemA >= m && es.remainMemB >= m)
         {
+            // 更新服务器信息
             es.remainCpuA -= c;
             es.remainCpuB -= c;
             es.remainMemA -= m;
@@ -186,8 +188,8 @@ bool addNewServer(string &_vmType, string &_vmID, int _index)
             es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
             es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
 
+            // 创建虚拟机信息
             existVM[_vmID].vmType = _vmType;
-            existVM[_vmID].isTwoNode = 1;
             existVM[_vmID].serverIndex = _index;
 
             // 申请虚拟机信息存储
@@ -207,7 +209,7 @@ bool addNewServer(string &_vmType, string &_vmID, int _index)
         es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
 
         existVM[_vmID].vmType = _vmType;
-        existVM[_vmID].isTwoNode = 0;
+        existVM[_vmID].inA = 1;
         existVM[_vmID].serverIndex = _index;
 
         returnInfo(_index, 'A');
@@ -223,17 +225,16 @@ bool redistribution(Request &r)
     // 如果是删除操作
     if (!r.isAdd)
     {
-
         // 存在的虚拟机信息
         ExistVM &ev = existVM[r.vmID];
-
         // 存在的服务器
         ExistServer &es = existServer[ev.serverIndex];
         // 存在的虚拟机格式
-        vector<int> &vm = vmInfo[ev.vmType];
+        const vector<int> &vm = vmInfo[ev.vmType];
+
         if (vm[2])
         {
-            //更新服务器信息
+            // 更新服务器信息
             es.remainCpuA += vm[0] / 2;
             es.remainCpuB += vm[0] / 2;
             es.remainMemA += vm[1] / 2;
@@ -241,7 +242,7 @@ bool redistribution(Request &r)
             es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
             es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
         }
-        else if (ev.isTwoNode)
+        else if (ev.inA)
         {
             es.remainCpuA += vm[0];
             es.remainMemA += vm[1];
@@ -260,27 +261,31 @@ bool redistribution(Request &r)
             dayCostSum -= serverInfo[es.serverType][3];
 #endif // TEST
 
-        //删除虚拟机信息
+        // 删除虚拟机信息
         existVM.erase(r.vmID);
         return true;
     }
-    vector<int> &vm = vmInfo[r.vmType];
-    //如果双端
+
+    // 如果是添加操作
+    // 如果双端
+    const vector<int> &vm = vmInfo[r.vmType];
+    int c = vm[0] / 2, m = vm[1] / 2;
     if (vm[2])
     {
-        int c = vm[0] / 2, m = vm[1] / 2;
         for (int i = 0; i < serverCnt; ++i)
         {
             ExistServer &es = existServer[i];
             if (es.remainCpuA >= c && es.remainCpuB >= c && es.remainMemA >= m && es.remainMemB >= m)
             {
+
 // 统计日均损耗
 #ifdef TEST
+                // todo: ?
                 if (serverInfo[es.serverType][0] == es.remainCpuA + es.remainCpuB)
                     dayCostSum += serverInfo[es.serverType][3];
 #endif // TEST
 
-                //更新服务器信息
+                // 更新服务器信息
                 es.remainCpuA -= c;
                 es.remainCpuB -= c;
                 es.remainMemA -= m;
@@ -288,11 +293,11 @@ bool redistribution(Request &r)
                 es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
                 es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
 
-                //创建虚拟机信息
+                // 创建虚拟机信息
                 existVM[r.vmID].vmType = r.vmType;
                 existVM[r.vmID].serverIndex = i;
 
-                //输出信息
+                // 申请虚拟机信息存储
                 returnInfo(i);
                 return true;
             }
@@ -303,13 +308,13 @@ bool redistribution(Request &r)
     //????????????????????????
     else
     {
-        int c = vm[0], m = vm[1];
         // 后续希望建立红黑树，按CM_Ratio参数选择合适的服务器分配
         for (int i = 0; i < serverCnt; ++i)
         {
             ExistServer &es = existServer[i];
             if (es.remainCpuA >= c && es.remainMemA >= m)
             {
+
 // 统计日均损耗
 #ifdef TEST
                 if (serverInfo[es.serverType][0] == es.remainCpuA + es.remainCpuB)
@@ -321,7 +326,7 @@ bool redistribution(Request &r)
                 es.CM_Ratio_A = es.remainCpuA * 1.0 / es.remainMemA;
 
                 existVM[r.vmID].vmType = r.vmType;
-                existVM[r.vmID].isTwoNode = 1;
+                existVM[r.vmID].inA = 1;
                 existVM[r.vmID].serverIndex = i;
 
                 returnInfo(i, 'A');
@@ -340,7 +345,7 @@ bool redistribution(Request &r)
                 es.CM_Ratio_B = es.remainCpuB * 1.0 / es.remainMemB;
 
                 existVM[r.vmID].vmType = r.vmType;
-                existVM[r.vmID].isTwoNode = 0;
+                existVM[r.vmID].inA = 0;
                 existVM[r.vmID].serverIndex = i;
 
                 returnInfo(i, 'B');
@@ -416,6 +421,7 @@ void allApplyServer()
 
                 serverApplyNumber[serverType]++;
                 serverIndex += 1;
+                serverCnt += 1;
             }
         }
     }
@@ -558,15 +564,20 @@ void readRequest()
         getchar();
         while ((c = getchar()) != ')')
             vmID += c;
-        needList[vmID] = {vmInfo[vmType][0], vmInfo[vmType][1]};
+        // needList[vmID] = {vmInfo[vmType][0], vmInfo[vmType][1]};
         // dayNeedCpu += needList[vmID][0];
         // dayNeedMem += needList[vmID][1];
+        // allNeedCpu += needList[vmID][0];
+        // allNeedMem += needList[vmID][1];
+        // maxC = max(maxC, needList[vmID][0]);
+        // maxM = max(maxM, needList[vmID][1]);
 
-        allNeedCpu += needList[vmID][0];
-        allNeedMem += needList[vmID][1];
+        allNeedCpu += vmInfo[vmType][0];
+        allNeedMem += vmInfo[vmType][1];
 
-        maxC = max(maxC, needList[vmID][0]);
-        maxM = max(maxM, needList[vmID][1]);
+        // 虚拟机在单个节点占用的最大资源
+        maxC = max(maxC, vmInfo[vmType][2] ? vmInfo[vmType][0] / 2 : vmInfo[vmType][0]);
+        maxM = max(maxM, vmInfo[vmType][2] ? vmInfo[vmType][1] / 2 : vmInfo[vmType][1]);
     }
     else
     {
